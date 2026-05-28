@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "937129222872",
+    "project_id": "neuroforge-workflow",
+    "storage_bucket": "neuroforge-workflow.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:937129222872:android:7a016bb94bb07807dcedad",
+        "android_client_info": {
+          "package_name": "com.example.neuroforge_workflow"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD0PqFSx95KqDwjj_73_oEgY_4v1fLuuvE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

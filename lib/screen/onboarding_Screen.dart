@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:neuroforge_workflow/auth/joincompany.dart';
+import 'package:neuroforge_workflow/auth/signin.dart';
 import 'package:neuroforge_workflow/core/constant/theme.dart';
 import 'package:neuroforge_workflow/model/onboarding_model.dart';
 
@@ -79,7 +81,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     final slide = onboardingSlides[index];
 
                     return Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 32),
+                      padding: const EdgeInsets.symmetric(horizontal: 40.0),
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -123,7 +125,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
                   // LAST PAGE
                   return Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 32),
+                    padding: const EdgeInsets.symmetric(horizontal: 40.0),
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
@@ -148,7 +150,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                                           style: ForgeTheme.displayHeader
                                               .copyWith(
                                                 fontSize: 24,
-                                                color: Colors.black,
+                                                color: ForgeTheme.textDark,
                                               ),
                                         ),
                                         TextSpan(
@@ -194,7 +196,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                                           style: ForgeTheme.displayHeader
                                               .copyWith(
                                                 fontSize: 24,
-                                                color: Colors.black,
+                                                color: ForgeTheme.textDark,
                                               ),
                                         ),
                                         TextSpan(
@@ -229,7 +231,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
             // BOTTOM SECTION
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
+              padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 24),
               child: Column(
                 children: [
                   // DOTS
@@ -270,7 +272,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                           curve: Curves.easeInOut,
                         );
                       },
-                      child: Text("Next", style: ForgeTheme.actionButtonText),
+                      child: Text(
+                        "Next",
+                        style: ForgeTheme.actionButtonText,
+                      ),
                     )
                   // LAST BUTTONS
                   else
@@ -285,7 +290,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                                 borderRadius: BorderRadius.circular(28),
                               ),
                             ),
-                            onPressed: () {},
+                            onPressed: () {
+                              Navigator.push(context, MaterialPageRoute(builder: (_) => const SignInScreen()));
+                            },
                             child: Text(
                               "Next",
                               style: ForgeTheme.actionButtonText,
@@ -305,7 +312,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                                 borderRadius: BorderRadius.circular(28),
                               ),
                             ),
-                            onPressed: () {},
+                            onPressed: () {
+                              Navigator.push(context, MaterialPageRoute(builder: (_) => const JoinCompanyScreen()));
+                            },
                             child: Text(
                               "Get Started",
                               style: ForgeTheme.actionButtonText,
