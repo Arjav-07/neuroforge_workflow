@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:neuroforge_workflow/auth/joincompany.dart';
-import 'package:neuroforge_workflow/auth/signin.dart';
 import 'package:neuroforge_workflow/core/constant/theme.dart';
+import 'package:neuroforge_workflow/core/utils/Landing_gatekeeper.dart'; // Verified import path matching your file schema
 import 'package:neuroforge_workflow/model/onboarding_model.dart';
 
 class OnboardingScreen extends StatefulWidget {
@@ -13,11 +12,17 @@ class OnboardingScreen extends StatefulWidget {
 
 class _OnboardingScreenState extends State<OnboardingScreen> {
   final PageController _pageController = PageController();
-
   int _currentIndex = 0;
 
   @override
+  void dispose() {
+    _pageController.dispose(); // Always dispose of controllers to prevent memory leaks
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    // True only when we reach the extra final page (index equals length)
     bool isLastPage = _currentIndex == onboardingSlides.length;
 
     return Scaffold(
@@ -45,12 +50,13 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                             size: 20,
                           ),
                         )
-                      : const SizedBox(width: 40),
+                      : const SizedBox(width: 40, height: 40), // Balanced spacing
 
                   // SKIP BUTTON
                   if (!isLastPage)
                     TextButton(
                       onPressed: () {
+                        // Animates smoothly or jumps directly to the last page index
                         _pageController.jumpToPage(onboardingSlides.length);
                       },
                       child: Text(
@@ -60,7 +66,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                           fontSize: 15,
                         ),
                       ),
-                    ),
+                    )
+                  else
+                    const SizedBox(width: 40),
                 ],
               ),
             ),
@@ -97,7 +105,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                               ),
                             ),
                           ),
-
                           RichText(
                             text: TextSpan(
                               children: [
@@ -114,113 +121,56 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                               ],
                             ),
                           ),
-
                           const SizedBox(height: 16),
-
                           Text(slide.description, style: ForgeTheme.bodyText),
                         ],
                       ),
                     );
                   }
 
-                  // LAST PAGE
+                  // LAST PAGE (Fixed Expanded Layout Crash)
                   return Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 40.0),
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Image.asset(
-                          "assets/images/onboarding4.png",
-                          height: MediaQuery.of(context).size.height * 0.35,
+                        Center(
+                          child: Container(
+                            height: MediaQuery.of(context).size.height * 0.35,
+                            margin: const EdgeInsets.only(bottom: 40),
+                            child: Image.asset(
+                              "assets/images/onboarding4.png",
+                              fit: BoxFit.contain,
+                            ),
+                          ),
                         ),
-
-                        const SizedBox(height: 40),
-
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  RichText(
-                                    text: TextSpan(
-                                      children: [
-                                        TextSpan(
-                                          text: "Organize &\n",
-                                          style: ForgeTheme.displayHeader
-                                              .copyWith(
-                                                fontSize: 24,
-                                                color: ForgeTheme.textDark,
-                                              ),
-                                        ),
-                                        TextSpan(
-                                          text: "Your work",
-                                          style: ForgeTheme.displayHeader
-                                              .copyWith(
-                                                fontSize: 24,
-                                                color: ForgeTheme.brandBlue,
-                                              ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  const SizedBox(height: 8),
-                                  Text(
-                                    "Everything you need to get your team moving",
-                                    style: ForgeTheme.bodyText.copyWith(
-                                      fontSize: 12,
-                                    ),
-                                  ),
-                                ],
+                        RichText(
+                          text: TextSpan(
+                            children: [
+                              TextSpan(
+                                text: "Collaborate\n",
+                                style: ForgeTheme.displayHeader.copyWith(
+                                  fontSize: 24,
+                                  color: ForgeTheme.textDark,
+                                ),
                               ),
-                            ),
-
-                            Container(
-                              width: 1,
-                              height: 80,
-                              color: Colors.black12,
-                              margin: const EdgeInsets.symmetric(
-                                horizontal: 16,
+                              TextSpan(
+                                text: "with team",
+                                style: ForgeTheme.displayHeader.copyWith(
+                                  fontSize: 24,
+                                  color: ForgeTheme.brandBlue,
+                                ),
                               ),
-                            ),
-
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  RichText(
-                                    text: TextSpan(
-                                      children: [
-                                        TextSpan(
-                                          text: "Collaborate\n",
-                                          style: ForgeTheme.displayHeader
-                                              .copyWith(
-                                                fontSize: 24,
-                                                color: ForgeTheme.textDark,
-                                              ),
-                                        ),
-                                        TextSpan(
-                                          text: "with team",
-                                          style: ForgeTheme.displayHeader
-                                              .copyWith(
-                                                fontSize: 24,
-                                                color: ForgeTheme.brandBlue,
-                                              ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  const SizedBox(height: 8),
-                                  Text(
-                                    "Everything you need to get your team moving",
-                                    style: ForgeTheme.bodyText.copyWith(
-                                      fontSize: 12,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          "Everything you need to get your team moving",
+                          style: ForgeTheme.bodyText.copyWith(
+                            fontSize: 12,
+                          ),
                         ),
                       ],
                     ),
@@ -234,8 +184,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 24),
               child: Column(
                 children: [
-                  // DOTS
+                  // DOTS INDICATOR
                   Row(
+                    mainAxisAlignment: MainAxisAlignment.center, 
                     children: List.generate(
                       onboardingSlides.length + 1,
                       (index) => AnimatedContainer(
@@ -255,7 +206,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
                   const SizedBox(height: 32),
 
-                  // NEXT BUTTON
+                  // CONDITIONAL BUTTONS
                   if (!isLastPage)
                     ElevatedButton(
                       style: ElevatedButton.styleFrom(
@@ -277,51 +228,24 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                         style: ForgeTheme.actionButtonText,
                       ),
                     )
-                  // LAST BUTTONS
                   else
-                    Row(
-                      children: [
-                        Expanded(
-                          child: ElevatedButton(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: ForgeTheme.brandBlue,
-                              minimumSize: const Size(double.infinity, 56),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(28),
-                              ),
-                            ),
-                            onPressed: () {
-                              Navigator.push(context, MaterialPageRoute(builder: (_) => const SignInScreen()));
-                            },
-                            child: Text(
-                              "Next",
-                              style: ForgeTheme.actionButtonText,
-                            ),
-                          ),
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: ForgeTheme.brandBlue,
+                        minimumSize: const Size(double.infinity, 56),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(28),
                         ),
-
-                        const SizedBox(width: 12),
-
-                        Expanded(
-                          child: OutlinedButton(
-                            style: OutlinedButton.styleFrom(
-                              backgroundColor: ForgeTheme.brandBlue,
-                              side: BorderSide.none,
-                              minimumSize: const Size(double.infinity, 56),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(28),
-                              ),
-                            ),
-                            onPressed: () {
-                              Navigator.push(context, MaterialPageRoute(builder: (_) => const JoinCompanyScreen()));
-                            },
-                            child: Text(
-                              "Get Started",
-                              style: ForgeTheme.actionButtonText,
-                            ),
-                          ),
-                        ),
-                      ],
+                        elevation: 0,
+                      ),
+                      onPressed: () {
+                        // Triggers preference checks, sets 'show_onboarding_flow' to false, and routes dynamically
+                        LandingGatekeeper.completeOnboardingFlow(context);
+                      },
+                      child: Text(
+                        "Get Started",
+                        style: ForgeTheme.actionButtonText,
+                      ),
                     ),
                 ],
               ),

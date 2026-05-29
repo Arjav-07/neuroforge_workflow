@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:neuroforge_workflow/core/constant/theme.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:neuroforge_workflow/core/utils/Landing_gatekeeper.dart';
+import 'package:neuroforge_workflow/screen/onboarding_Screen.dart';
 
 class SignInScreen extends StatefulWidget {
   const SignInScreen({super.key});
@@ -38,13 +41,35 @@ class _SignInScreenState extends State<SignInScreen> {
     setState(() => _isLoading = true);
 
     try {
-      await FirebaseAuth.instance.signInWithEmailAndPassword(
+      // 1. Authenticate user credentials with Firebase Auth
+      UserCredential userCredential = await FirebaseAuth.instance.signInWithEmailAndPassword(
         email: email,
         password: password,
       );
       
       if (!mounted) return;
-      // Clears login stack history so hitting back doesn't pull log-in panel back up
+
+      // 2. Instantly inspect Firestore to see if this profile is already linked to a workspace
+      final DocumentSnapshot userDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(userCredential.user!.uid)
+          .get();
+
+      if (!mounted) return;
+
+      if (userDoc.exists) {
+        final userData = userDoc.data() as Map<String, dynamic>?;
+        final String companyId = userData?['companyId'] ?? '';
+        final String onboardingStatus = userData?['onboardingStatus'] ?? '';
+
+        // If company tracking token is found and onboarding is finalized, bypass joining setup!
+        if (companyId.isNotEmpty && onboardingStatus == 'completed') {
+          Navigator.pushNamedAndRemoveUntil(context, '/home', (route) => false);
+          return;
+        }
+      }
+      
+      // Default fallback: Direct to the Join / Create company flow
       Navigator.pushNamedAndRemoveUntil(context, '/join-company', (route) => false);
 
     } on FirebaseAuthException catch (e) {
@@ -83,9 +108,13 @@ class _SignInScreenState extends State<SignInScreen> {
             backgroundColor: Colors.transparent,
             elevation: 0,
             leading: IconButton(
-              icon: const Icon(Icons.chevron_left, color: brandBlue, size: 28),
-              onPressed: () => Navigator.pop(context),
+              icon: const Icon(Icons.chevron_left, color: ForgeTheme.brandBlue, size: 28),
+              onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const OnboardingScreen())),
             ),
+            // Disabled default native back arrows completely
+            automaticallyImplyLeading: false,
+            // Right-aligned action deck containing our sign-out control routine
+            actions: [],
           ),
         ),
       ),

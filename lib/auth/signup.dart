@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:neuroforge_workflow/core/constant/theme.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class SignUpScreen extends StatefulWidget {
   const SignUpScreen({super.key});
@@ -11,6 +12,8 @@ class SignUpScreen extends StatefulWidget {
 
 class _SignUpScreenState extends State<SignUpScreen> {
   bool agree = false;
+  bool _isLoading = false; // Added to manage global UI loading state
+  
   final TextEditingController _usernameController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
@@ -36,7 +39,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
             elevation: 0,
             leading: IconButton(
               icon: const Icon(Icons.chevron_left, color: brandBlue, size: 28),
-              onPressed: () => Navigator.pop(context),
+              onPressed: () => _isLoading ? null : Navigator.pop(context), // Disable back action when loading
             ),
           ),
         ),
@@ -89,11 +92,13 @@ class _SignUpScreenState extends State<SignUpScreen> {
                       height: 24,
                       child: Checkbox(
                         value: agree,
-                        onChanged: (v) {
-                          setState(() {
-                            agree = v!;
-                          });
-                        },
+                        onChanged: _isLoading 
+                          ? null // Disable interaction during network stream
+                          : (v) {
+                              setState(() {
+                                agree = v!;
+                              });
+                            },
                       ),
                     ),
                     const SizedBox(width: 8),
@@ -110,80 +115,95 @@ class _SignUpScreenState extends State<SignUpScreen> {
                 ),
                 const SizedBox(height: 20),
 
-                buildMainActionButton(
-                  label: "Sign Up",
-                  onTap: () async {
-                    // 1. Basic structural validation checking
-                    if (_emailController.text.trim().isEmpty ||
-                        _passwordController.text.trim().isEmpty) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text("Please fill in your credentials."),
-                        ),
-                      );
-                      return;
-                    }
+                // Conditional block toggles between the button and a loading spinner
+                _isLoading
+                    ? const CircularProgressIndicator(color: brandBlue)
+                    : buildMainActionButton(
+                        label: "Sign Up",
+                        onTap: () async {
+                          final username = _usernameController.text.trim();
+                          final email = _emailController.text.trim();
+                          final password = _passwordController.text.trim();
 
-                    try {
-                      // 2. Dispatch network registration task
-                      await FirebaseAuth.instance
-                          .createUserWithEmailAndPassword(
-                            email: _emailController.text.trim(),
-                            password: _passwordController.text.trim(),
-                          );
+                          // 1. Basic structural validation
+                          if (username.isEmpty || email.isEmpty || password.isEmpty) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text("Please fill in all fields.")),
+                            );
+                            return;
+                          }
 
-                      if (!context.mounted) return;
-                      Navigator.pushNamed(context, '/signin');
-                    } on FirebaseAuthException catch (e) {
-                      // 3. Catch custom Firebase errors cleanly instead of crashing
-                      String message = "Registration failed. Please try again.";
+                          if (!agree) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text("You must agree to the terms.")),
+                            );
+                            return;
+                          }
 
-                      if (e.code == 'email-already-in-use') {
-                        message =
-                            "This email is already registered. Try logging in instead!";
-                      } else if (e.code == 'weak-password') {
-                        message = "The password provided is too weak.";
-                      } else if (e.code == 'invalid-email') {
-                        message = "The email address is badly formatted.";
-                      }
+                          // Trigger spinner and freeze inputs
+                          setState(() {
+                            _isLoading = true;
+                          });
 
-                      if (!context.mounted) return;
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(message),
-                          backgroundColor: ForgeTheme.brandBlue,
-                        ),
-                      );
-                    } catch (e) {
-                      // Catch-all for basic system/network connection failures
-                      if (!context.mounted) return;
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text("An unexpected error occurred: $e"),
-                          backgroundColor: ForgeTheme.brandBlue,
-                        ),
-                      );
-                    }
-                  },
-                ),
+                          try {
+                            // 2. Dispatch network registration task
+                            UserCredential userCredential = await FirebaseAuth.instance
+                                .createUserWithEmailAndPassword(
+                                  email: email,
+                                  password: password,
+                                );
 
-                // const Padding(
-                //   padding: EdgeInsets.symmetric(vertical: 18.0),
-                //   child: Text("OR", style: TextStyle(color: kMutedTextColor, fontSize: 12, fontWeight: FontWeight.w500)),
-                // ),
+                            // 3. Ensure the user was created successfully
+                            if (userCredential.user != null) {
+                              final String uid = userCredential.user!.uid;
 
-                // Row(
-                //   mainAxisAlignment: MainAxisAlignment.center,
-                //   children: [
-                //     buildSocialIconCircle("🌐"),
-                //     const SizedBox(width: 20),
-                //     buildSocialIconCircle("🐱"),
-                //   ],
-                // ),
+                              // Update Auth Profile Display Name
+                              await userCredential.user!.updateDisplayName(username);
+                              await userCredential.user!.reload();
+
+                              // 4. Record user data into Firestore with flow mapping states
+                              await FirebaseFirestore.instance.collection('users').doc(uid).set({
+                                'uid': uid,
+                                'username': username,
+                                'email': email,
+                                'companyId': '', // Initialized empty
+                                'role': '', // Initialized empty until chosen
+                                'onboardingStatus': 'pending_invite', // Onboarding milestone tracker
+                                'createdAt': FieldValue.serverTimestamp(),
+                              });
+                            }
+
+                            if (!context.mounted) return;
+                            
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text("Account created successfully!")),
+                            );
+                            
+                            Navigator.pushNamed(context, '/signin');
+                          } on FirebaseAuthException catch (e) {
+                            final message = e.message ?? 'Authentication error';
+                            if (!context.mounted) return;
+                            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+                          } catch (e) {
+                            if (!context.mounted) return;
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text("An error occurred: ${e.toString()}")),
+                            );
+                          } finally {
+                            // Re-enable interactive states if operation terminates or fails
+                            if (mounted) {
+                              setState(() {
+                                _isLoading = false;
+                              });
+                            }
+                          }
+                        },
+                      ),
+
                 const SizedBox(height: 28),
 
                 GestureDetector(
-                  onTap: () => Navigator.pushNamed(context, '/signin'),
+                  onTap: () => _isLoading ? null : Navigator.pushNamed(context, '/signin'),
                   child: const Text.rich(
                     TextSpan(
                       text: "Already have account? ",
