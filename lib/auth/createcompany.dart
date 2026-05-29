@@ -126,6 +126,7 @@ class _CreateCompanyScreenState extends State<CreateCompanyScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                const SizedBox(height: 24),
                 Center(child: Text("Create a Company", style: ForgeTheme.displayHeader.copyWith(fontSize: 24))),
                 const SizedBox(height: 4),
                 Center(child: Text("Tell us about your company", style: ForgeTheme.bodyText)),
