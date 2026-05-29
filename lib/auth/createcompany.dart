@@ -84,10 +84,19 @@ class _CreateCompanyScreenState extends State<CreateCompanyScreen> {
         'companyId': companyRef.id, 'role': 'Owner', 'onboardingStatus': 'completed', 
       }, SetOptions(merge: true));
 
-      if (!mounted) return;
-      Navigator.pushNamedAndRemoveUntil(context, '/invite-link', (route) => false, arguments: {
-        'inviteCode': generatedCode, 'inviteUrl': inviteUrl, 'companyName': companyName, 'companyId': companyRef.id,
-      });
+      // inside lib/auth/createcompany.dart -> _handleCreateCompany method
+if (!mounted) return;
+Navigator.pushNamedAndRemoveUntil(
+  context, 
+  '/invite-link', 
+  (route) => false, 
+  arguments: {
+    'inviteCode': generatedCode,
+    'inviteUrl': inviteUrl,
+    'companyName': companyName,
+    'companyId': companyRef.id,
+  },
+);
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e")));

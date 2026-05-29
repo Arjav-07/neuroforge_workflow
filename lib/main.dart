@@ -11,7 +11,6 @@ import 'package:neuroforge_workflow/screen/choose_role_screen.dart';
 import 'package:neuroforge_workflow/screen/home_screen.dart';
 import 'package:neuroforge_workflow/screen/invitation_screen.dart';
 import 'package:neuroforge_workflow/screen/invite_link_screen.dart';
-import 'package:neuroforge_workflow/screen/invitepeoplescreen.dart';
 
 Future<void> main() async {
   // Guard baseline engine interaction bindings
@@ -62,7 +61,6 @@ class MyApp extends StatelessWidget {
         '/choose-role': (context) => const ChooseRoleScreen(),
         '/invitation-screen': (context) => const InvitationScreen(),
         '/invite-link': (context) => const InviteLinkScreen(),
-        '/invite-people': (context) => const InviteMembersScreen(),
 
         // Core App Space Target
         '/home': (context) => const HomeScreen(),
