@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:neuroforge_workflow/core/constant/theme.dart';
+import 'package:neuroforge_workflow/screen/task_detailed_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -354,163 +355,173 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildTaskCard(Map<String, dynamic> task) {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 0, vertical: 16),
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: ForgeTheme.brandBlue,
-        borderRadius: BorderRadius.circular(28),
-        border: Border.all(color: ForgeTheme.surfaceWhite, width: 3),
-        boxShadow: [
-          BoxShadow(
-            color: ForgeTheme.brandBlue.withOpacity(0.28),
-            blurRadius: 24,
-            offset: const Offset(0, 10),
+    return GestureDetector(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => TaskDetailScreen(task: task),
           ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              _buildOverlappingTeamAvatars(),
-              const Spacer(),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 8,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.18),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(
-                      Icons.access_time_filled,
-                      color: Colors.white,
-                      size: 16,
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      task['time'],
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 0.2,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 24),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
-              color: ForgeTheme.surfaceWhite,
-              borderRadius: BorderRadius.circular(20),
+        );
+      },
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 0, vertical: 16),
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(
+          color: ForgeTheme.brandBlue,
+          borderRadius: BorderRadius.circular(28),
+          border: Border.all(color: ForgeTheme.surfaceWhite, width: 3),
+          boxShadow: [
+            BoxShadow(
+              color: ForgeTheme.brandBlue.withOpacity(0.28),
+              blurRadius: 24,
+              offset: const Offset(0, 10),
             ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
               children: [
-                const Icon(
-                  Icons.flag_rounded,
-                  color: Colors.redAccent,
-                  size: 14,
-                ),
-                const SizedBox(width: 4),
-                Text(
-                  task['priority'],
-                  style: const TextStyle(
-                    color: Colors.redAccent,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
+                _buildOverlappingTeamAvatars(),
+                const Spacer(),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 8,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.18),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.access_time_filled,
+                        color: Colors.white,
+                        size: 16,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        task['time'],
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 0.2,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],
             ),
-          ),
-          const SizedBox(height: 18),
-          Text(
-            task['title'],
-            style: const TextStyle(
-              fontSize: 30,
-              fontWeight: FontWeight.bold,
-              color: Colors.white,
-              height: 1.15,
-              letterSpacing: -0.5,
-            ),
-          ),
-          const Spacer(),
-          Row(
-            children: [
-              Expanded(
-                child: Container(
-                  height: 54,
-                  padding: const EdgeInsets.symmetric(horizontal: 6),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.22),
-                    borderRadius: BorderRadius.circular(30),
-                  ),
-                  child: Row(
-                    children: [
-                      const CircleAvatar(
-                        radius: 21,
-                        backgroundColor: Colors.white,
-                        child: Icon(
-                          Icons.check,
-                          color: ForgeTheme.brandBlue,
-                          size: 18,
-                        ),
-                      ),
-                      const SizedBox(width: 14),
-                      Text(
-                        "To Complete",
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w600,
-                          fontSize: 13,
-                          letterSpacing: 0.2,
-                        ),
-                      ),
-                      const Spacer(),
-                      Icon(
-                        Icons.keyboard_double_arrow_right_rounded,
-                        color: Colors.white.withOpacity(0.7),
-                        size: 20,
-                      ),
-                      const SizedBox(width: 10),
-                    ],
-                  ),
-                ),
+            const SizedBox(height: 24),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: ForgeTheme.surfaceWhite,
+                borderRadius: BorderRadius.circular(20),
               ),
-              const SizedBox(width: 16),
-              Container(
-                width: 48,
-                height: 48,
-                decoration: const BoxDecoration(
-                  color: ForgeTheme.surfaceWhite,
-                  shape: BoxShape.circle,
-                ),
-                child: Transform.scale(
-                  scale: 0.40,
-                  child: Image.asset(
-                    "assets/icons/edit.png",
-                    errorBuilder: (context, error, stackTrace) => const Icon(
-                      Icons.edit_outlined,
-                      color: ForgeTheme.textDark,
-                      size: 22,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(
+                    Icons.flag_rounded,
+                    color: Colors.redAccent,
+                    size: 14,
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    task['priority'],
+                    style: const TextStyle(
+                      color: Colors.redAccent,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 18),
+            Text(
+              task['title'],
+              style: const TextStyle(
+                fontSize: 30,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+                height: 1.15,
+                letterSpacing: -0.5,
+              ),
+            ),
+            const Spacer(),
+            Row(
+              children: [
+                Expanded(
+                  child: Container(
+                    height: 54,
+                    padding: const EdgeInsets.symmetric(horizontal: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.22),
+                      borderRadius: BorderRadius.circular(30),
+                    ),
+                    child: Row(
+                      children: [
+                        const CircleAvatar(
+                          radius: 21,
+                          backgroundColor: Colors.white,
+                          child: Icon(
+                            Icons.check,
+                            color: ForgeTheme.brandBlue,
+                            size: 18,
+                          ),
+                        ),
+                        const SizedBox(width: 14),
+                        Text(
+                          "To Complete",
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 13,
+                            letterSpacing: 0.2,
+                          ),
+                        ),
+                        const Spacer(),
+                        Icon(
+                          Icons.keyboard_double_arrow_right_rounded,
+                          color: Colors.white.withOpacity(0.7),
+                          size: 20,
+                        ),
+                        const SizedBox(width: 10),
+                      ],
                     ),
                   ),
                 ),
-              ),
-            ],
-          ),
-        ],
+                const SizedBox(width: 16),
+                Container(
+                  width: 48,
+                  height: 48,
+                  decoration: const BoxDecoration(
+                    color: ForgeTheme.surfaceWhite,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Transform.scale(
+                    scale: 0.40,
+                    child: Image.asset(
+                      "assets/icons/edit.png",
+                      errorBuilder: (context, error, stackTrace) => const Icon(
+                        Icons.edit_outlined,
+                        color: ForgeTheme.textDark,
+                        size: 22,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:neuroforge_workflow/core/constant/theme.dart';
+import 'package:neuroforge_workflow/screen/add_event_screen.dart';
+import 'package:neuroforge_workflow/screen/calender_screen.dart';
 import 'package:neuroforge_workflow/screen/home_screen.dart';
 
 class MainNavigationShell extends StatefulWidget {
@@ -15,8 +17,8 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
   // Central Router Core Stack Mappings
   final List<Widget> _appWorkspaceScreens = [
     const HomeScreen(), 
-    const Center(child: Text("Calendar Workspace Coming Soon")), 
-    const Center(child: Text("Create Task Sheet Coming Soon")),    
+    const CalendarScreen(),
+    const AddEventScreen(),
     const Center(child: Text("App Settings Panel Coming Soon")),   
   ];
 
