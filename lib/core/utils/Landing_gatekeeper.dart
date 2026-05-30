@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:neuroforge_workflow/core/constant/nav_bar.dart';
+import 'package:neuroforge_workflow/screen/company_screen/choose_role_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:neuroforge_workflow/screen/onboarding_screen.dart';
 import 'package:neuroforge_workflow/auth/signin.dart';
-import 'package:neuroforge_workflow/auth/joincompany.dart';
-import 'package:neuroforge_workflow/screen/home_screen.dart';
+import 'package:neuroforge_workflow/screen/company_screen/joincompany.dart';
 
 class LandingGatekeeper extends StatelessWidget {
   const LandingGatekeeper({super.key});
@@ -40,12 +41,12 @@ class LandingGatekeeper extends StatelessWidget {
               return const Scaffold(body: Center(child: CircularProgressIndicator()));
             }
 
-            // No user active session found -> Direct to credentials form loop
+            // No active user session found -> Direct to credentials form loop
             if (!authSnapshot.hasData || authSnapshot.data == null) {
               return const SignInScreen();
             }
 
-            // 3. Condition Gamma: User token matches, verify database company mapping parameters
+            // 3. Condition Gamma: User token matches, evaluate complete profile status machine state
             return FutureBuilder<DocumentSnapshot>(
               future: FirebaseFirestore.instance
                   .collection('users')
@@ -64,12 +65,19 @@ class LandingGatekeeper extends StatelessWidget {
                 final String companyId = userData?['companyId'] ?? '';
                 final String onboardingStatus = userData?['onboardingStatus'] ?? '';
 
-                // Already bound to workspace cleanly -> Direct route to Home, bypassing Onboarding and Joining pages
+                // --- EXPANDED MULTI-STATE PROFILE EVALUATION ROUTER ---
+                
+                // State A: Account setup completely finished -> Direct route to Home workspace shell
                 if (companyId.isNotEmpty && onboardingStatus == 'completed') {
-                  return const HomeScreen();
+                  return const MainNavigationShell();
                 }
 
-                // Authenticated account has no active company context assigned yet -> Route to Join Setup
+                // State B: Linked to a company but shut app down before role picking
+                if (companyId.isNotEmpty && onboardingStatus == 'selecting_role') {
+                  return const ChooseRoleScreen();
+                }
+
+                // State C: Account exists but has no company context linked yet -> Route to Join/Create hub
                 return const JoinCompanyScreen();
               },
             );
@@ -110,6 +118,11 @@ class LandingGatekeeper extends StatelessWidget {
 
         if (companyId.isNotEmpty && onboardingStatus == 'completed') {
           Navigator.pushNamedAndRemoveUntil(context, '/home', (route) => false);
+          return;
+        }
+        
+        if (companyId.isNotEmpty && onboardingStatus == 'selecting_role') {
+          Navigator.pushNamedAndRemoveUntil(context, '/choose-role', (route) => false);
           return;
         }
       }

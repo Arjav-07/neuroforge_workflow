@@ -1,16 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:neuroforge_workflow/auth/createcompany.dart';
+import 'package:neuroforge_workflow/core/constant/nav_bar.dart';
+import 'package:neuroforge_workflow/screen/company_screen/createcompany.dart';
 import 'package:neuroforge_workflow/auth/forgotpassword.dart';
-import 'package:neuroforge_workflow/auth/joincompany.dart';
+import 'package:neuroforge_workflow/screen/company_screen/joincompany.dart';
 import 'package:neuroforge_workflow/auth/signin.dart';
 import 'package:neuroforge_workflow/auth/signup.dart';
 import 'package:neuroforge_workflow/core/utils/Landing_gatekeeper.dart';
 import 'package:neuroforge_workflow/firebase_options.dart';
-import 'package:neuroforge_workflow/screen/choose_role_screen.dart';
-import 'package:neuroforge_workflow/screen/home_screen.dart';
-import 'package:neuroforge_workflow/screen/invitation_screen.dart';
-import 'package:neuroforge_workflow/screen/invite_link_screen.dart';
+import 'package:neuroforge_workflow/screen/company_screen/choose_role_screen.dart';
+import 'package:neuroforge_workflow/screen/company_screen/invitation_screen.dart';
+import 'package:neuroforge_workflow/screen/company_screen/invite_link_screen.dart';
 
 Future<void> main() async {
   // Guard baseline engine interaction bindings
@@ -63,7 +63,7 @@ class MyApp extends StatelessWidget {
         '/invite-link': (context) => const InviteLinkScreen(),
 
         // Core App Space Target
-        '/home': (context) => const HomeScreen(),
+        '/home': (context) => const MainNavigationShell(),
       },
     );
   }
