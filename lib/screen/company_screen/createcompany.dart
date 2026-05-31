@@ -29,8 +29,14 @@ class _CreateCompanyScreenState extends State<CreateCompanyScreen> {
     super.dispose();
   }
 
-  // Visual Custom Layout Dropdown Template 
-  Widget _buildThemeDropdownField({required String hintText, required IconData icon, required String? value, required List<String> items, required ValueChanged<String?> onChanged}) {
+  // Visual Custom Layout Dropdown Template
+  Widget _buildThemeDropdownField({
+    required String hintText,
+    required IconData icon,
+    required String? value,
+    required List<String> items,
+    required ValueChanged<String?> onChanged,
+  }) {
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       height: 52,
@@ -38,14 +44,34 @@ class _CreateCompanyScreenState extends State<CreateCompanyScreen> {
       decoration: BoxDecoration(color: kInputFieldBg, borderRadius: BorderRadius.circular(40)),
       child: Row(
         children: [
-          Container(width: 32, height: 32, decoration: const BoxDecoration(color: kIconCircleBg, shape: BoxShape.circle), child: Icon(icon, color: brandBlue, size: 16)),
+          Container(
+            width: 32,
+            height: 32,
+            decoration: const BoxDecoration(color: kIconCircleBg, shape: BoxShape.circle),
+            child: Icon(icon, color: brandBlue, size: 16),
+          ),
           const SizedBox(width: 14),
           Expanded(
             child: DropdownButtonHideUnderline(
               child: DropdownButton<String>(
-                value: value, isExpanded: true,
+                value: value,
+                isExpanded: true,
+                dropdownColor: ForgeTheme.surfaceWhite, // Explicit menu canvas background wrapper
                 hint: Text(hintText, style: ForgeTheme.bodyText),
-                items: items.map((e) => DropdownMenuItem(value: e, child: Text(e, style: const TextStyle(fontSize: 14)))).toList(),
+                // FIXED: Injected explicit style variables to keep typography contrast visible
+                items: items.map((e) {
+                  return DropdownMenuItem(
+                    value: e,
+                    child: Text(
+                      e,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        color: ForgeTheme.textDark,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  );
+                }).toList(),
                 onChanged: onChanged,
               ),
             ),
@@ -75,28 +101,35 @@ class _CreateCompanyScreenState extends State<CreateCompanyScreen> {
 
       final companyRef = FirebaseFirestore.instance.collection('companies').doc();
       await companyRef.set({
-        'companyId': companyRef.id, 'name': companyName, 'slug': companySlug,
-        'industry': _selectedIndustry, 'size': _selectedSize, 'ownerUid': user.uid,
-        'inviteCode': generatedCode, 'inviteUrl': inviteUrl, 'createdAt': FieldValue.serverTimestamp(),
+        'companyId': companyRef.id,
+        'name': companyName,
+        'slug': companySlug,
+        'industry': _selectedIndustry,
+        'size': _selectedSize,
+        'ownerUid': user.uid,
+        'inviteCode': generatedCode,
+        'inviteUrl': inviteUrl,
+        'createdAt': FieldValue.serverTimestamp(),
       });
 
       await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
-        'companyId': companyRef.id, 'role': 'Owner', 'onboardingStatus': 'completed', 
+        'companyId': companyRef.id,
+        'role': 'Owner',
+        'onboardingStatus': 'completed',
       }, SetOptions(merge: true));
 
-      // inside lib/auth/createcompany.dart -> _handleCreateCompany method
-if (!mounted) return;
-Navigator.pushNamedAndRemoveUntil(
-  context, 
-  '/invite-link', 
-  (route) => false, 
-  arguments: {
-    'inviteCode': generatedCode,
-    'inviteUrl': inviteUrl,
-    'companyName': companyName,
-    'companyId': companyRef.id,
-  },
-);
+      if (!mounted) return;
+      Navigator.pushNamedAndRemoveUntil(
+        context,
+        '/invite-link',
+        (route) => false,
+        arguments: {
+          'inviteCode': generatedCode,
+          'inviteUrl': inviteUrl,
+          'companyName': companyName,
+          'companyId': companyRef.id,
+        },
+      );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e")));
@@ -112,7 +145,9 @@ Navigator.pushNamedAndRemoveUntil(
       child: Scaffold(
         backgroundColor: ForgeTheme.background,
         appBar: AppBar(
-          backgroundColor: Colors.transparent, elevation: 0, automaticallyImplyLeading: false,
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          automaticallyImplyLeading: false,
           actions: [
             TextButton(
               onPressed: () async {
@@ -145,9 +180,27 @@ Navigator.pushNamedAndRemoveUntil(
                 _buildThemeDropdownField(hintText: "Select Industry", icon: Icons.check_circle_outline, value: _selectedIndustry, items: _industries, onChanged: (v) => setState(() => _selectedIndustry = v)),
                 _buildThemeDropdownField(hintText: "Select size", icon: Icons.people_outline, value: _selectedSize, items: _companySizes, onChanged: (v) => setState(() => _selectedSize = v)),
                 const SizedBox(height: 24),
-                _isLoading 
+                _isLoading
                     ? const Center(child: CircularProgressIndicator(color: brandBlue))
                     : buildMainActionButton(label: "Create Company", onTap: _handleCreateCompany),
+                const SizedBox(height: 16),
+                Center(
+                  child: GestureDetector(
+                    onTap: () => Navigator.pushNamed(context, '/join-company'),
+                    child: const Text.rich(
+                      TextSpan(
+                        text: "Already have a company? ",
+                        style: TextStyle(color: ForgeTheme.textMuted, fontSize: 13),
+                        children: [
+                          TextSpan(
+                            text: "Join Company",
+                            style: TextStyle(color: brandBlue, fontWeight: FontWeight.bold),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
               ],
             ),
           ),

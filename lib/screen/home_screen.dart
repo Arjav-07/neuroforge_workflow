@@ -13,52 +13,18 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  String _selectedFilter = "Today's Task";
+  String _selectedFilter = "All";
   late PageController _pageController;
   double _scrollOffset = 0.0;
-
-  // --- COMPLETE COMPREHENSIVE DATA MATRIX TRACKING ALL FILTERS ---
-  final List<Map<String, dynamic>> _allWorkspaceTasks = [
-    // Today's Tasks
-    {
-      "title": "Wiring Dashboard\nAnalytics",
-      "time": "02:00 AM",
-      "priority": "High",
-      "category": "Today's Task",
-    },
-    {
-      "title": "Syncing Firestore\nSecurity Rules",
-      "time": "04:30 PM",
-      "priority": "Medium",
-      "category": "Today's Task",
-    },
-
-    // Weekly Tasks
-    {
-      "title": "Designing Neo-Brutal\nUI Components",
-      "time": "11:00 AM",
-      "priority": "High",
-      "category": "Weekly tasks",
-    },
-    {
-      "title": "Reviewing Sprint\nArchitecture",
-      "time": "09:00 AM",
-      "priority": "Low",
-      "category": "Weekly tasks",
-    },
-    {
-      "title": "Deploying Webhook\nCloud Functions",
-      "time": "06:15 PM",
-      "priority": "High",
-      "category": "Weekly tasks",
-    },
-  ];
+  String _myCompanyId = "";
+  bool _isLoadingContext = true;
 
   @override
-  void initState() {
-    super.initState();
-    _initPageController();
-  }
+void initState() {
+  super.initState();
+  _initPageController();
+  _fetchUserCompanyContext();
+}
 
   // Initializes and resets scroll offset loops cleanly
   void _initPageController() {
@@ -74,7 +40,26 @@ class _HomeScreenState extends State<HomeScreen> {
         });
     _scrollOffset = initialLoopOffsetPage.toDouble();
   }
+  
 
+Future<void> _fetchUserCompanyContext() async {
+  final user = FirebaseAuth.instance.currentUser;
+
+  if (user == null) return;
+
+  final doc = await FirebaseFirestore.instance
+      .collection('users')
+      .doc(user.uid)
+      .get();
+
+  if (doc.exists) {
+    setState(() {
+      _myCompanyId =
+          doc.data()?['companyId'] ?? '';
+      _isLoadingContext = false;
+    });
+  }
+}
   @override
   void dispose() {
     _pageController.dispose();
@@ -82,13 +67,38 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   // Dynamically parses task data tracking configurations matching your top pill layout selection
-  List<Map<String, dynamic>> _getFilteredTasks() {
+  List<Map<String, dynamic>> _getFilteredTasks(
+    List<Map<String, dynamic>> tasks,
+  ) {
     if (_selectedFilter == "All") {
-      return _allWorkspaceTasks;
+      return tasks;
     }
-    return _allWorkspaceTasks
-        .where((task) => task['category'] == _selectedFilter)
-        .toList();
+
+    if (_selectedFilter == "Today's Task") {
+      final now = DateTime.now();
+
+      final todayKey =
+          "${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}";
+
+      return tasks.where((task) => task['dueDate'] == todayKey).toList();
+    }
+
+    if (_selectedFilter == "Weekly tasks") {
+      final now = DateTime.now();
+      final weekEnd = now.add(const Duration(days: 7));
+
+      return tasks.where((task) {
+        if (task['deadline'] == null) {
+          return false;
+        }
+
+        final deadline = (task['deadline'] as Timestamp).toDate();
+
+        return deadline.isAfter(now) && deadline.isBefore(weekEnd);
+      }).toList();
+    }
+
+    return tasks;
   }
 
   String _getInitials(String name) {
@@ -105,7 +115,16 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final User? currentUser = FirebaseAuth.instance.currentUser;
-    final List<Map<String, dynamic>> displayedTasks = _getFilteredTasks();
+
+
+if (_isLoadingContext) {
+  return const Scaffold(
+    body: Center(
+      child: CircularProgressIndicator(),
+    ),
+  );
+}
+
 
     return Scaffold(
       backgroundColor: ForgeTheme.background,
@@ -246,78 +265,127 @@ class _HomeScreenState extends State<HomeScreen> {
                         _buildFilterChip("Today's Task"),
                         const SizedBox(width: 12),
                         _buildFilterChip("Weekly tasks"),
+                        const SizedBox(width: 12),
                       ],
                     ),
                   ),
 
                   const SizedBox(height: 16),
-
                   // --- 4. FLUID INTERACTIVE CIRCULAR PAGE DECK (FIXED UPWARD-RIGHT FANNING ARRANGEMENT) ---
                   Expanded(
-                    child: displayedTasks.isEmpty
-                        ? _buildEmptyStateView()
-                        : PageView.builder(
-                            key: ValueKey(_selectedFilter),
-                            controller: _pageController,
-                            clipBehavior: Clip.none,
-                            itemBuilder: (context, index) {
-                              final int circularDataIndex =
-                                  index % displayedTasks.length;
-                              double indexPositionDelta = index - _scrollOffset;
+                    child: StreamBuilder<QuerySnapshot>(
+                      stream: FirebaseFirestore.instance
+                          .collection('tasks')
+                          .where('companyId', isEqualTo: _myCompanyId)
+                          .snapshots(),
 
-                              // --- MOCKUP ARRANGEMENT TRANSFORMATIONS MATRIX ---
-                              double rotationAngle =
-                                  indexPositionDelta *
-                                  -0.06; // Tilted rotation factor
-                              double horizontalShift =
-                                  indexPositionDelta *
-                                  28.0; // Pushes cards out to right side background
-                              double verticalStackOffset =
-                                  indexPositionDelta *
-                                  14.0; // Lifts background layers upward
-
-                              // Downscales tracking layers behind foreground card frame
-                              double activeScaleFactor = math.max(
-                                0.82,
-                                1.0 - (indexPositionDelta.abs() * 0.05),
+                      builder: (context, taskSnapshot) {
+                        if (taskSnapshot.hasError) {
+                          return Center(
+                            child: Text(
+                              taskSnapshot.error.toString(),
+                              ),
                               );
+                              }
+                              
+                              
+                          if (!taskSnapshot.hasData) {
+                          return const Center(
+                            child: CircularProgressIndicator(),
+                          );
+                        }
 
-                              // Normalization constraint boundary layout when card leaves viewport left side
-                              if (indexPositionDelta < 0) {
-                                rotationAngle = indexPositionDelta * -0.02;
-                                horizontalShift = indexPositionDelta * 32.0;
-                                verticalStackOffset = 0.0;
+                        List<Map<String, dynamic>> displayedTasks = taskSnapshot
+                            .data!
+                            .docs
+                            .map(
+                              (doc) => {
+                                ...doc.data() as Map<String, dynamic>,
+                                "docId": doc.id,
+                              },
+                            )
+                            .toList();
+
+                        displayedTasks = _getFilteredTasks(displayedTasks);
+                        debugPrint(
+                          "TASK COUNT: ${displayedTasks.length}",
+                          );
+                          
+                          if (displayedTasks.isNotEmpty) {
+                            debugPrint(
+                              displayedTasks.first.toString(),
+                              );
                               }
 
-                              return AnimatedBuilder(
-                                animation: _pageController,
-                                builder: (context, child) {
-                                  return Transform(
-                                    transform: Matrix4.identity()
-                                      ..setEntry(
-                                        3,
-                                        2,
-                                        0.001,
-                                      ) // Deep depth perception
-                                      ..translate(
-                                        horizontalShift,
-                                        verticalStackOffset,
-                                      )
-                                      ..scale(
-                                        activeScaleFactor,
-                                        activeScaleFactor,
-                                      )
-                                      ..rotateZ(rotationAngle),
-                                    alignment: Alignment.center,
-                                    child: child,
-                                  );
-                                },
-                                child: _buildTaskCard(
-                                  displayedTasks[circularDataIndex],
-                                ),
-                              );
-                            },
-                          ),
+                        if (displayedTasks.isEmpty) {
+                          return _buildEmptyStateView();
+                        }
+
+                        return PageView.builder(
+                          itemCount: displayedTasks.length, // Large number for infinite looping
+                          key: ValueKey(_selectedFilter),
+                          controller: _pageController,
+                          clipBehavior: Clip.none,
+                          itemBuilder: (context, index) {
+                            final int circularDataIndex =
+                                index % displayedTasks.length;
+                            double indexPositionDelta = index - _scrollOffset;
+
+                            // --- MOCKUP ARRANGEMENT TRANSFORMATIONS MATRIX ---
+                            double rotationAngle =
+                                indexPositionDelta *
+                                -0.06; // Tilted rotation factor
+                            double horizontalShift =
+                                indexPositionDelta *
+                                28.0; // Pushes cards out to right side background
+                            double verticalStackOffset =
+                                indexPositionDelta *
+                                14.0; // Lifts background layers upward
+
+                            // Downscales tracking layers behind foreground card frame
+                            double activeScaleFactor = math.max(
+                              0.82,
+                              1.0 - (indexPositionDelta.abs() * 0.05),
+                            );
+
+                            // Normalization constraint boundary layout when card leaves viewport left side
+                            if (indexPositionDelta < 0) {
+                              rotationAngle = indexPositionDelta * -0.02;
+                              horizontalShift = indexPositionDelta * 32.0;
+                              verticalStackOffset = 0.0;
+                            }
+
+                            return AnimatedBuilder(
+                              animation: _pageController,
+                              builder: (context, child) {
+                                return Transform(
+                                  transform: Matrix4.identity()
+                                    ..setEntry(
+                                      3,
+                                      2,
+                                      0.001,
+                                    ) // Deep depth perception
+                                    ..translate(
+                                      horizontalShift,
+                                      verticalStackOffset,
+                                    )
+                                    ..scale(
+                                      activeScaleFactor,
+                                      activeScaleFactor,
+                                    )
+                                    ..rotateZ(rotationAngle),
+                                  alignment: Alignment.center,
+                                  child: child,
+                                );
+                              },
+                              child: _buildTaskCard(
+                                displayedTasks[circularDataIndex],
+                              ),
+                            );
+                          },
+                        );
+                      },
+                    ),
                   ),
                   const SizedBox(height: 24),
                 ],
@@ -359,9 +427,7 @@ class _HomeScreenState extends State<HomeScreen> {
       onTap: () {
         Navigator.push(
           context,
-          MaterialPageRoute(
-            builder: (context) => TaskDetailScreen(task: task),
-          ),
+          MaterialPageRoute(builder: (context) => TaskDetailScreen(task: task)),
         );
       },
       child: Container(
@@ -404,7 +470,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                       const SizedBox(width: 6),
                       Text(
-                        task['time'],
+                        task['dueTime'] ?? task['time'] ?? '--',
                         style: const TextStyle(
                           color: Colors.white,
                           fontSize: 12,
@@ -434,7 +500,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   const SizedBox(width: 4),
                   Text(
-                    task['priority'],
+                    (task['priority'] ?? 'Medium').toString(),
                     style: const TextStyle(
                       color: Colors.redAccent,
                       fontSize: 12,
@@ -446,7 +512,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             const SizedBox(height: 18),
             Text(
-              task['title'],
+              (task['title'] ?? 'Untitled Task').toString(),
               style: const TextStyle(
                 fontSize: 30,
                 fontWeight: FontWeight.bold,
@@ -611,25 +677,25 @@ class _HomeScreenState extends State<HomeScreen> {
       child: Stack(
         children: [
           const CircleAvatar(
-                radius: 19,
-                backgroundColor: ForgeTheme.surfaceWhite,
-                child: CircleAvatar(
-                  radius: 17,
-                  backgroundColor: kIconCircleBg,
-                backgroundImage: AssetImage("assets/images/task_avatar2.png"),
-              ),
-              ),
+            radius: 19,
+            backgroundColor: ForgeTheme.surfaceWhite,
+            child: CircleAvatar(
+              radius: 17,
+              backgroundColor: kIconCircleBg,
+              backgroundImage: AssetImage("assets/images/task_avatar2.png"),
+            ),
+          ),
           Positioned(
             left: 20,
-              child: const CircleAvatar(
-                radius: 19,
-                backgroundColor: ForgeTheme.surfaceWhite,
-                child: CircleAvatar(
-                  radius: 17,
-                  backgroundColor: kIconCircleBg,
+            child: const CircleAvatar(
+              radius: 19,
+              backgroundColor: ForgeTheme.surfaceWhite,
+              child: CircleAvatar(
+                radius: 17,
+                backgroundColor: kIconCircleBg,
                 backgroundImage: AssetImage("assets/images/task_avatar2.png"),
               ),
-              )
+            ),
           ),
         ],
       ),

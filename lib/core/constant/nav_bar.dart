@@ -3,6 +3,7 @@ import 'package:neuroforge_workflow/core/constant/theme.dart';
 import 'package:neuroforge_workflow/screen/add_event_screen.dart';
 import 'package:neuroforge_workflow/screen/calender_screen.dart';
 import 'package:neuroforge_workflow/screen/home_screen.dart';
+import 'package:neuroforge_workflow/screen/setting_screen.dart';
 
 class MainNavigationShell extends StatefulWidget {
   const MainNavigationShell({super.key});
@@ -19,7 +20,7 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
     const HomeScreen(), 
     const CalendarScreen(),
     const AddEventScreen(),
-    const Center(child: Text("App Settings Panel Coming Soon")),   
+    const SettingsScreen(),   
   ];
 
   @override
