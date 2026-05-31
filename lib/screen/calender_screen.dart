@@ -12,27 +12,48 @@ class CalendarScreen extends StatefulWidget {
   State<CalendarScreen> createState() => _CalendarScreenState();
 }
 
-class _CalendarScreenState extends State<CalendarScreen> {
+// Added WidgetsBindingObserver to detect background-to-foreground day shifts seamlessly
+class _CalendarScreenState extends State<CalendarScreen> with WidgetsBindingObserver {
   late PageController _pageController;
   double _scrollOffset = 0.0;
   
   late DateTime _selectedDate;
   late List<DateTime> _currentWeekDays;
 
-  final List<Map<String, dynamic>> _allTasksDatabase = [
-    {"title": "Wiring Dashboard\nAnalytics", "time": "02:00 AM", "priority": "High", "date": "2026-05-30"},
-    {"title": "Syncing Firestore\nSecurity Rules", "time": "04:30 PM", "priority": "Medium", "date": "2026-05-30"},
-    {"title": "Reviewing Sprint\nArchitecture", "time": "09:00 AM", "priority": "Low", "date": "2026-05-28"},
-    {"title": "Designing Neo-Brutal\nUI Components", "time": "11:00 AM", "priority": "High", "date": "2026-05-29"},
-    {"title": "Deploying Webhook\nCloud Functions", "time": "06:15 PM", "priority": "High", "date": "2026-06-01"},
-  ];
+  Stream<QuerySnapshot>? _tasksStream;
+  String _myCompanyId = "";
+  bool _isLoadingContext = true;
 
   @override
   void initState() {
     super.initState();
-    _selectedDate = DateTime(2026, 5, 30);
-    _generateWeekDays(_selectedDate);
+    WidgetsBinding.instance.addObserver(this);
+    _refreshToCurrentDate();
     _initPageController();
+    _fetchUserCompanyContext();
+  }
+
+  // Refreshes calendar anchor points back to true local time bounds
+  void _refreshToCurrentDate() {
+    final now = DateTime.now();
+    _selectedDate = DateTime(now.year, now.month, now.day);
+    _generateWeekDays(_selectedDate);
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // If the app is resumed from background, check if the date changed overnight
+    if (state == AppLifecycleState.resumed) {
+      final now = DateTime.now();
+      final todayMidnight = DateTime(now.year, now.month, now.day);
+      
+      if (_selectedDate.isBefore(todayMidnight)) {
+        setState(() {
+          _refreshToCurrentDate();
+          _initPageController();
+        });
+      }
+    }
   }
 
   void _generateWeekDays(DateTime anchorDate) {
@@ -42,25 +63,57 @@ class _CalendarScreenState extends State<CalendarScreen> {
   }
 
   void _initPageController() {
-    const int initialLoopOffsetPage = 1000;
-    _pageController = PageController(viewportFraction: 0.86, initialPage: initialLoopOffsetPage)
+    _pageController = PageController(viewportFraction: 0.86, initialPage: 0)
       ..addListener(() {
+        if (!_pageController.hasClients) return;
         setState(() {
-          _scrollOffset = _pageController.page ?? 0.0;
+          _scrollOffset = _pageController.page ?? _pageController.initialPage.toDouble();
         });
       });
-    _scrollOffset = initialLoopOffsetPage.toDouble();
+    _scrollOffset = 0.0;
+  }
+
+  Future<void> _fetchUserCompanyContext() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    final doc = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(user.uid)
+        .get();
+
+    if (doc.exists) {
+      setState(() {
+        _myCompanyId = (doc.data()?['companyId'] ?? '').toString();
+        
+        _tasksStream = FirebaseFirestore.instance
+            .collection('tasks')
+            .where('companyId', isEqualTo: _myCompanyId)
+            .snapshots();
+            
+        _isLoadingContext = false;
+      });
+    } else {
+      setState(() {
+        _isLoadingContext = false;
+      });
+    }
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _pageController.dispose();
     super.dispose();
   }
 
-  List<Map<String, dynamic>> _getFilteredTasksForSelectedDate() {
+  List<Map<String, dynamic>> _filterTasksBySelectedDate(List<Map<String, dynamic>> mixedTasks) {
     String targetedDateKey = "${_selectedDate.year}-${_selectedDate.month.toString().padLeft(2, '0')}-${_selectedDate.day.toString().padLeft(2, '0')}";
-    return _allTasksDatabase.where((task) => task['date'] == targetedDateKey).toList();
+    
+    return mixedTasks.where((task) {
+      final taskDate = task['date'] ?? task['dueDate'];
+      return taskDate == targetedDateKey;
+    }).toList();
   }
 
   String _getInitials(String name) {
@@ -89,7 +142,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
     return months[month - 1];
   }
 
-  void _openFullCalendarView() {
+  void _openFullCalendarView(List<DocumentSnapshot> rawCompanyDocs, List<DocumentSnapshot> rawPersonalDocs) {
     final DateTime startLimit = DateTime(2026, 1, 1);
     final DateTime endLimit = DateTime(2036, 12, 31);
     final int totalMonths = ((endLimit.year - startLimit.year) * 12) + endLimit.month - startLimit.month + 1;
@@ -106,12 +159,19 @@ class _CalendarScreenState extends State<CalendarScreen> {
         return StatefulBuilder(
           builder: (context, setModalState) {
             return Container(
-              constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.72),
-              padding: const EdgeInsets.all(24.0),
+              constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.75),
+              padding: const EdgeInsets.fromLTRB(24, 12, 24, 24),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Container(width: 40, height: 5, decoration: BoxDecoration(color: ForgeTheme.textDark.withOpacity(0.1), borderRadius: BorderRadius.circular(10))),
+                  Container(
+                    width: 40, 
+                    height: 5, 
+                    decoration: BoxDecoration(
+                      color: ForgeTheme.textDark.withOpacity(0.1), 
+                      borderRadius: BorderRadius.circular(10)
+                    )
+                  ),
                   const SizedBox(height: 20),
                   
                   Expanded(
@@ -124,7 +184,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                         
                         final DateTime activeMonthData = DateTime(computedYearVal, computedMonthVal, 1);
                         final int totalDaysInMonth = DateTime(computedYearVal, computedMonthVal + 1, 0).day;
-                        final int leadingOffsetCount = activeMonthData.weekday - 1;
+                        int leadingOffsetCount = activeMonthData.weekday - 1;
 
                         return Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -231,9 +291,12 @@ class _CalendarScreenState extends State<CalendarScreen> {
                             const SizedBox(height: 12),
                             Expanded(
                               child: GridView.builder(
-                                shrinkWrap: true,
                                 physics: const BouncingScrollPhysics(),
-                                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 7, mainAxisSpacing: 10, crossAxisSpacing: 10),
+                                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                                  crossAxisCount: 7, 
+                                  mainAxisSpacing: 10, 
+                                  crossAxisSpacing: 10
+                                ),
                                 itemCount: totalDaysInMonth + leadingOffsetCount, 
                                 itemBuilder: (context, gridIndex) {
                                   if (gridIndex < leadingOffsetCount) return const SizedBox.shrink();
@@ -241,6 +304,19 @@ class _CalendarScreenState extends State<CalendarScreen> {
                                   int dayNum = gridIndex - leadingOffsetCount + 1;
                                   DateTime targetGridDay = DateTime(computedYearVal, computedMonthVal, dayNum);
                                   bool isSameDayActive = _selectedDate.day == dayNum && _selectedDate.month == computedMonthVal && _selectedDate.year == computedYearVal;
+
+                                  String cellDateStr = "${targetGridDay.year}-${targetGridDay.month.toString().padLeft(2, '0')}-${targetGridDay.day.toString().padLeft(2, '0')}";
+                                  
+                                  bool hasCompanyTask = rawCompanyDocs.any((doc) {
+                                    final data = doc.data() as Map<String, dynamic>?;
+                                    return (data?['date'] ?? data?['dueDate']) == cellDateStr;
+                                  });
+                                  bool hasPersonalTask = rawPersonalDocs.any((doc) {
+                                    final data = doc.data() as Map<String, dynamic>?;
+                                    return (data?['date'] ?? data?['dueDate']) == cellDateStr;
+                                  });
+
+                                  bool hasTaskOnThisDay = hasCompanyTask || hasPersonalTask;
 
                                   return GestureDetector(
                                     onTap: () {
@@ -257,8 +333,30 @@ class _CalendarScreenState extends State<CalendarScreen> {
                                         borderRadius: BorderRadius.circular(14),
                                         border: Border.all(color: isSameDayActive ? ForgeTheme.brandBlue : Colors.white, width: 1.5),
                                       ),
-                                      child: Center(
-                                        child: Text("$dayNum", style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: isSameDayActive ? Colors.white : ForgeTheme.textDark)),
+                                      child: Stack(
+                                        alignment: Alignment.center,
+                                        children: [
+                                          Text(
+                                            "$dayNum", 
+                                            style: TextStyle(
+                                              fontSize: 14, 
+                                              fontWeight: FontWeight.bold, 
+                                              color: isSameDayActive ? Colors.white : ForgeTheme.textDark
+                                            )
+                                          ),
+                                          if (hasTaskOnThisDay)
+                                            Positioned(
+                                              bottom: 4,
+                                              child: Container(
+                                                width: 5,
+                                                height: 5,
+                                                decoration: BoxDecoration(
+                                                  shape: BoxShape.circle,
+                                                  color: isSameDayActive ? Colors.white : ForgeTheme.brandBlue,
+                                                ),
+                                              ),
+                                            )
+                                        ],
                                       ),
                                     ),
                                   );
@@ -282,19 +380,27 @@ class _CalendarScreenState extends State<CalendarScreen> {
   @override
   Widget build(BuildContext context) {
     final User? currentUser = FirebaseAuth.instance.currentUser;
-    final List<Map<String, dynamic>> displayedTasks = _getFilteredTasksForSelectedDate();
+    final uid = currentUser?.uid ?? '';
+
+    if (_isLoadingContext) {
+      return const Scaffold(
+        body: Center(
+          child: CircularProgressIndicator(),
+        ),
+      );
+    }
 
     return Scaffold(
       backgroundColor: const Color(0xFFF2F1ED),
       body: SafeArea(
         child: StreamBuilder<DocumentSnapshot>(
-          stream: FirebaseFirestore.instance.collection('users').doc(currentUser?.uid ?? '').snapshots(),
-          builder: (context, snapshot) {
+          stream: FirebaseFirestore.instance.collection('users').doc(uid).snapshots(),
+          builder: (context, userSnapshot) {
             String rawUsername = (currentUser?.displayName ?? "User").toUpperCase();
             String displayRole = "USER ROLE";
 
-            if (snapshot.hasData && snapshot.data!.exists) {
-              final userData = snapshot.data!.data() as Map<String, dynamic>?;
+            if (userSnapshot.hasData && userSnapshot.data!.exists) {
+              final userData = userSnapshot.data!.data() as Map<String, dynamic>?;
               rawUsername = userData?['username'] ?? rawUsername;
               final String rawRole = userData?['role'] ?? '';
               if (rawRole.isNotEmpty) displayRole = rawRole.toUpperCase();
@@ -336,35 +442,50 @@ class _CalendarScreenState extends State<CalendarScreen> {
                     ],
                   ),
                   const SizedBox(height: 30),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.only(left: 10.0),
-                        child: Text.rich(
-                          TextSpan(
-                            text: "HI ${_getInitials(rawUsername)}, ",
-                            style: const TextStyle(fontSize: 30, fontWeight: FontWeight.w800, color: ForgeTheme.textDark, letterSpacing: -0.8),
-                            children: [TextSpan(text: "nice to\nsee you", style: TextStyle(fontWeight: FontWeight.w800, color: ForgeTheme.textDark.withOpacity(0.35)))],
-                          ),
-                        ),
-                      ),
-                      GestureDetector(
-                        onTap: _openFullCalendarView,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                          margin: const EdgeInsets.only(bottom: 4),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(16),
-                            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 4, offset: const Offset(0, 2))]
-                          ),
-                          child: const Text("View full calendar", style: TextStyle(color: ForgeTheme.brandBlue, fontSize: 12, fontWeight: FontWeight.w800, letterSpacing: -0.1)),
-                        ),
-                      ),
-                    ],
+                  
+                  StreamBuilder<QuerySnapshot>(
+                    stream: _tasksStream,
+                    builder: (context, companySnapshot) {
+                      return StreamBuilder<QuerySnapshot>(
+                        stream: FirebaseFirestore.instance.collection('users').doc(uid).collection('personal_todos').snapshots(),
+                        builder: (context, personalSnapshot) {
+                          final companyDocs = companySnapshot.hasData ? companySnapshot.data!.docs : <DocumentSnapshot>[];
+                          final personalDocs = personalSnapshot.hasData ? personalSnapshot.data!.docs : <DocumentSnapshot>[];
+                          
+                          return Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              Padding(
+                                padding: const EdgeInsets.only(left: 10.0),
+                                child: Text.rich(
+                                  TextSpan(
+                                    text: "HI ${_getInitials(rawUsername)}, ",
+                                    style: const TextStyle(fontSize: 30, fontWeight: FontWeight.w800, color: ForgeTheme.textDark, letterSpacing: -0.8),
+                                    children: [TextSpan(text: "nice to\nsee you", style: TextStyle(fontWeight: FontWeight.w800, color: ForgeTheme.textDark.withOpacity(0.35)))],
+                                  ),
+                                ),
+                              ),
+                              GestureDetector(
+                                onTap: () => _openFullCalendarView(companyDocs, personalDocs),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                                  margin: const EdgeInsets.only(bottom: 4),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.circular(16),
+                                    boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 4, offset: const Offset(0, 2))]
+                                  ),
+                                  child: const Text("View full calendar", style: TextStyle(color: ForgeTheme.brandBlue, fontSize: 12, fontWeight: FontWeight.w800, letterSpacing: -0.1)),
+                                ),
+                              ),
+                            ],
+                          );
+                        }
+                      );
+                    },
                   ),
+                        
                   const SizedBox(height: 30),
                   SingleChildScrollView(
                     scrollDirection: Axis.horizontal,
@@ -409,42 +530,89 @@ class _CalendarScreenState extends State<CalendarScreen> {
                     ),
                   ),
                   const SizedBox(height: 16),
+                  
                   Expanded(
-                    child: displayedTasks.isEmpty
-                        ? _buildEmptyStateView()
-                        : PageView.builder(
-                            key: ValueKey(_selectedDate),
-                            controller: _pageController,
-                            clipBehavior: Clip.none,
-                            itemBuilder: (context, index) {
-                              final int circularDataIndex = index % displayedTasks.length;
-                              double indexPositionDelta = index - _scrollOffset;
-                              double rotationAngle = indexPositionDelta * -0.06;
-                              double horizontalShift = indexPositionDelta * 18.0;
-                              double verticalStackOffset = indexPositionDelta * 14.0;
-                              double activeScaleFactor = math.max(0.82, 1.0 - (indexPositionDelta.abs() * 0.05));
-                              if (indexPositionDelta < 0) {
-                                rotationAngle = indexPositionDelta * -0.02;
-                                horizontalShift = indexPositionDelta * 32.0;
-                                verticalStackOffset = 0.0;
-                              }
-                              return AnimatedBuilder(
-                                animation: _pageController,
-                                builder: (context, child) {
-                                  return Transform(
-                                    transform: Matrix4.identity()
-                                      ..setEntry(3, 2, 0.001)
-                                      ..translate(horizontalShift, verticalStackOffset)
-                                      ..scale(activeScaleFactor, activeScaleFactor)
-                                      ..rotateZ(rotationAngle),
-                                    alignment: Alignment.center,
-                                    child: child,
-                                  );
-                                },
-                                child: _buildTaskCard(displayedTasks[circularDataIndex]),
-                              );
-                            },
-                          ),
+                    child: StreamBuilder<QuerySnapshot>(
+                      stream: _tasksStream,
+                      builder: (context, companySnapshot) {
+                        if (companySnapshot.hasError) {
+                          return Center(child: Text("Error: ${companySnapshot.error}"));
+                        }
+                        if (!companySnapshot.hasData) {
+                          return const Center(child: CircularProgressIndicator());
+                        }
+
+                        List<Map<String, dynamic>> companyTasks = companySnapshot.data!.docs.map((doc) {
+                          return {
+                            ...doc.data() as Map<String, dynamic>,
+                            "docId": doc.id,
+                            "isPersonal": false,
+                          };
+                        }).toList();
+
+                        return StreamBuilder<QuerySnapshot>(
+                          stream: FirebaseFirestore.instance.collection('users').doc(uid).collection('personal_todos').snapshots(),
+                          builder: (context, personalSnapshot) {
+                            if (!personalSnapshot.hasData) {
+                              return const Center(child: CircularProgressIndicator());
+                            }
+
+                            List<Map<String, dynamic>> personalTasks = personalSnapshot.data!.docs.map((doc) {
+                              final data = doc.data() as Map<String, dynamic>;
+                              return {
+                                ...data,
+                                "docId": doc.id,
+                                "isPersonal": true,
+                                "priority": data["priority"] ?? "Medium",
+                              };
+                            }).toList();
+
+                            List<Map<String, dynamic>> unifiedTasks = List.from(companyTasks)..addAll(personalTasks);
+                            final List<Map<String, dynamic>> displayedTasks = _filterTasksBySelectedDate(unifiedTasks);
+
+                            if (displayedTasks.isEmpty) {
+                              return _buildEmptyStateView();
+                            }
+
+                            return PageView.builder(
+                              key: ValueKey(_selectedDate),
+                              controller: _pageController,
+                              clipBehavior: Clip.none,
+                              itemCount: displayedTasks.length, 
+                              itemBuilder: (context, index) {
+                                double indexPositionDelta = index - _scrollOffset;
+                                double rotationAngle = indexPositionDelta * -0.06;
+                                double horizontalShift = indexPositionDelta * 18.0;
+                                double verticalStackOffset = indexPositionDelta * 14.0;
+                                double activeScaleFactor = math.max(0.82, 1.0 - (indexPositionDelta.abs() * 0.05));
+                                
+                                if (indexPositionDelta < 0) {
+                                  rotationAngle = indexPositionDelta * -0.02;
+                                  horizontalShift = indexPositionDelta * 32.0;
+                                  verticalStackOffset = 0.0;
+                                }
+                                
+                                return AnimatedBuilder(
+                                  animation: _pageController,
+                                  builder: (context, child) {
+                                    return Transform(
+                                      transform: Matrix4.identity()
+                                        ..setEntry(3, 2, 0.001)
+                                        ..translate(horizontalShift, verticalStackOffset)
+                                        ..scale(activeScaleFactor, activeScaleFactor)
+                                        ..rotateZ(rotationAngle),
+                                      alignment: Alignment.center,
+                                      child: child,
+                                    );
+                                  },
+                                  child: _buildTaskCard(displayedTasks[index]), 
+                                );
+                              },
+                            );
+                          },
+                        );
+                      },
+                    ),
                   ),
                   const SizedBox(height: 24),
                 ],
@@ -470,6 +638,8 @@ class _CalendarScreenState extends State<CalendarScreen> {
   }
 
   Widget _buildTaskCard(Map<String, dynamic> task) {
+    final bool isPersonal = task['isPersonal'] == true;
+
     return GestureDetector(
       onTap: () {
         Navigator.push(context, MaterialPageRoute(builder: (context) => TaskDetailScreen(task: task)));
@@ -497,27 +667,49 @@ class _CalendarScreenState extends State<CalendarScreen> {
                     children: [
                       const Icon(Icons.access_time_filled, color: Colors.white, size: 16),
                       const SizedBox(width: 6),
-                      Text(task['time'], style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 0.2)),
+                      Text(task['time'] ?? task['dueTime'] ?? '--:--', style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 0.2)),
                     ],
                   ),
                 ),
               ],
             ),
             const SizedBox(height: 24),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(color: ForgeTheme.surfaceWhite, borderRadius: BorderRadius.circular(20)),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.flag_rounded, color: Colors.redAccent, size: 14),
-                  const SizedBox(width: 4),
-                  Text(task['priority'], style: const TextStyle(color: Colors.redAccent, fontSize: 12, fontWeight: FontWeight.w600)),
-                ],
-              ),
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(color: ForgeTheme.surfaceWhite, borderRadius: BorderRadius.circular(20)),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.flag_rounded, color: Colors.redAccent, size: 14),
+                      const SizedBox(width: 4),
+                      Text(task['priority'] ?? 'Medium', style: const TextStyle(color: Colors.redAccent, fontSize: 12, fontWeight: FontWeight.w600)),
+                    ],
+                  ),
+                ),
+                if (isPersonal) ...[
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.orange,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: const Text(
+                      "PERSONAL",
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 10,
+                      ),
+                    ),
+                  ),
+                ]
+              ],
             ),
             const SizedBox(height: 18),
-            Text(task['title'], style: const TextStyle(fontSize: 30, fontWeight: FontWeight.bold, color: Colors.white, height: 1.15, letterSpacing: -0.5)),
+            Text(task['title'] ?? 'Untitled Task', style: const TextStyle(fontSize: 30, fontWeight: FontWeight.bold, color: Colors.white, height: 1.15, letterSpacing: -0.5)),
             const Spacer(),
             Row(
               children: [

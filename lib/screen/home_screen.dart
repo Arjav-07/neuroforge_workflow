@@ -5,6 +5,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:neuroforge_workflow/core/constant/theme.dart';
 import 'package:neuroforge_workflow/screen/task_detailed_screen.dart';
 
+const Color kIconCircleBg = Colors.grey;
+
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
@@ -12,89 +14,121 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   String _selectedFilter = "All";
   late PageController _pageController;
   double _scrollOffset = 0.0;
   String _myCompanyId = "";
   bool _isLoadingContext = true;
+  late DateTime _currentTrackingDay;
 
   @override
-void initState() {
-  super.initState();
-  _initPageController();
-  _fetchUserCompanyContext();
-}
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _refreshTrackingDate();
+    _initPageController();
+    _fetchUserCompanyContext();
+  }
 
-  // Initializes and resets scroll offset loops cleanly
-  void _initPageController() {
-    const int initialLoopOffsetPage = 1000;
-    _pageController =
-        PageController(
-          viewportFraction: 0.86,
-          initialPage: initialLoopOffsetPage,
-        )..addListener(() {
-          setState(() {
-            _scrollOffset = _pageController.page ?? 0.0;
-          });
+  void _refreshTrackingDate() {
+    final now = DateTime.now();
+    _currentTrackingDay = DateTime(now.year, now.month, now.day);
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      final now = DateTime.now();
+      final todayMidnight = DateTime(now.year, now.month, now.day);
+      
+      if (_currentTrackingDay.isBefore(todayMidnight)) {
+        setState(() {
+          _refreshTrackingDate();
+          _initPageController();
         });
-    _scrollOffset = initialLoopOffsetPage.toDouble();
+      }
+    }
   }
-  
 
-Future<void> _fetchUserCompanyContext() async {
-  final user = FirebaseAuth.instance.currentUser;
-
-  if (user == null) return;
-
-  final doc = await FirebaseFirestore.instance
-      .collection('users')
-      .doc(user.uid)
-      .get();
-
-  if (doc.exists) {
-    setState(() {
-      _myCompanyId =
-          doc.data()?['companyId'] ?? '';
-      _isLoadingContext = false;
-    });
+  // Starts the controller at page index 0 to eliminate infinite loop offset math gaps
+  void _initPageController() {
+    _pageController = PageController(
+      viewportFraction: 0.86,
+      initialPage: 0,
+    )..addListener(() {
+        if (!_pageController.hasClients) return;
+        setState(() {
+          _scrollOffset = _pageController.page ?? _pageController.initialPage.toDouble();
+        });
+      });
+    _scrollOffset = 0.0;
   }
-}
+
+  Future<void> _fetchUserCompanyContext() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    final doc = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(user.uid)
+        .get();
+
+    if (doc.exists) {
+      setState(() {
+        _myCompanyId = (doc.data()?['companyId'] ?? '').toString();
+        _isLoadingContext = false;
+      });
+    } else {
+      setState(() {
+        _isLoadingContext = false;
+      });
+    }
+  }
+
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _pageController.dispose();
     super.dispose();
   }
 
-  // Dynamically parses task data tracking configurations matching your top pill layout selection
-  List<Map<String, dynamic>> _getFilteredTasks(
-    List<Map<String, dynamic>> tasks,
-  ) {
+  // Dynamically filters consolidated structures matching string date keys
+  List<Map<String, dynamic>> _getFilteredTasks(List<Map<String, dynamic>> tasks) {
     if (_selectedFilter == "All") {
       return tasks;
     }
 
+    final todayKey =
+        "${_currentTrackingDay.year}-${_currentTrackingDay.month.toString().padLeft(2, '0')}-${_currentTrackingDay.day.toString().padLeft(2, '0')}";
+
     if (_selectedFilter == "Today's Task") {
-      final now = DateTime.now();
-
-      final todayKey =
-          "${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}";
-
-      return tasks.where((task) => task['dueDate'] == todayKey).toList();
+      return tasks.where((task) {
+        final itemDate = task['dueDate'] ?? task['date'];
+        return itemDate == todayKey;
+      }).toList();
     }
 
     if (_selectedFilter == "Weekly tasks") {
-      final now = DateTime.now();
-      final weekEnd = now.add(const Duration(days: 7));
+      final weekEnd = _currentTrackingDay.add(const Duration(days: 7));
 
       return tasks.where((task) {
+        // Handles timestamp string format checks for target weekly boundaries safely
+        final itemDateStr = task['dueDate'] ?? task['date'];
+        if (itemDateStr != null) {
+          try {
+            final parsedDate = DateTime.parse(itemDateStr.toString());
+            return (parsedDate.isAfter(_currentTrackingDay) || parsedDate.isAtSameMomentAs(_currentTrackingDay)) && 
+                   parsedDate.isBefore(weekEnd);
+          } catch (_) {}
+        }
+
         if (task['deadline'] == null) {
           return false;
         }
-
         final deadline = (task['deadline'] as Timestamp).toDate();
-
-        return deadline.isAfter(now) && deadline.isBefore(weekEnd);
+        return (deadline.isAfter(_currentTrackingDay) || deadline.isAtSameMomentAs(_currentTrackingDay)) && 
+               deadline.isBefore(weekEnd);
       }).toList();
     }
 
@@ -105,10 +139,12 @@ Future<void> _fetchUserCompanyContext() async {
     if (name.isEmpty) return "PM";
     List<String> nameParts = name.trim().split(RegExp(r'\s+'));
     String initials = "";
-    if (nameParts.isNotEmpty && nameParts[0].isNotEmpty)
+    if (nameParts.isNotEmpty && nameParts[0].isNotEmpty) {
       initials += nameParts[0][0];
-    if (nameParts.length > 1 && nameParts[nameParts.length - 1].isNotEmpty)
+    }
+    if (nameParts.length > 1 && nameParts[nameParts.length - 1].isNotEmpty) {
       initials += nameParts[nameParts.length - 1][0];
+    }
     return initials.toUpperCase();
   }
 
@@ -116,15 +152,9 @@ Future<void> _fetchUserCompanyContext() async {
   Widget build(BuildContext context) {
     final User? currentUser = FirebaseAuth.instance.currentUser;
 
-
-if (_isLoadingContext) {
-  return const Scaffold(
-    body: Center(
-      child: CircularProgressIndicator(),
-    ),
-  );
-}
-
+    if (_isLoadingContext) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
 
     return Scaffold(
       backgroundColor: ForgeTheme.background,
@@ -135,9 +165,8 @@ if (_isLoadingContext) {
               .doc(currentUser?.uid ?? '')
               .snapshots(),
           builder: (context, snapshot) {
-            String rawUsername = (currentUser?.displayName ?? "User")
-                .toUpperCase();
-            String displayRole = "USER ROLE"; // Default placeholder role
+            String rawUsername = (currentUser?.displayName ?? "User").toUpperCase();
+            String displayRole = "USER ROLE";
 
             if (snapshot.hasData && snapshot.data!.exists) {
               final userData = snapshot.data!.data() as Map<String, dynamic>?;
@@ -178,9 +207,7 @@ if (_isLoadingContext) {
                           child: const CircleAvatar(
                             radius: 24,
                             backgroundColor: kIconCircleBg,
-                            backgroundImage: AssetImage(
-                              "assets/images/profile_avatar.png",
-                            ),
+                            backgroundImage: AssetImage("assets/images/profile_avatar.png"),
                           ),
                         ),
                       ),
@@ -212,15 +239,9 @@ if (_isLoadingContext) {
                           ],
                         ),
                       ),
-                      _buildHeaderIconButton(
-                        "assets/icons/chat.png",
-                        Icons.chat_bubble_outline_rounded,
-                      ),
+                      _buildHeaderIconButton("assets/icons/chat.png", Icons.chat_bubble_outline_rounded),
                       const SizedBox(width: 12),
-                      _buildHeaderIconButton(
-                        "assets/icons/notification.png",
-                        Icons.notifications_none_rounded,
-                      ),
+                      _buildHeaderIconButton("assets/icons/notification.png", Icons.notifications_none_rounded),
                     ],
                   ),
 
@@ -253,7 +274,7 @@ if (_isLoadingContext) {
 
                   const SizedBox(height: 30),
 
-                  // --- 3. INTERACTIVE FILTER CHIP TRACK (FIXED SCROLL WRAPPER TO PREVENT OVERFLOW) ---
+                  // --- 3. INTERACTIVE FILTER CHIP TRACK ---
                   SingleChildScrollView(
                     scrollDirection: Axis.horizontal,
                     physics: const BouncingScrollPhysics(),
@@ -271,116 +292,108 @@ if (_isLoadingContext) {
                   ),
 
                   const SizedBox(height: 16),
-                  // --- 4. FLUID INTERACTIVE CIRCULAR PAGE DECK (FIXED UPWARD-RIGHT FANNING ARRANGEMENT) ---
+
+                  // --- 4. FLUID INTERACTIVE CIRCULAR PAGE DECK ---
                   Expanded(
                     child: StreamBuilder<QuerySnapshot>(
                       stream: FirebaseFirestore.instance
                           .collection('tasks')
                           .where('companyId', isEqualTo: _myCompanyId)
                           .snapshots(),
-
                       builder: (context, taskSnapshot) {
                         if (taskSnapshot.hasError) {
-                          return Center(
-                            child: Text(
-                              taskSnapshot.error.toString(),
-                              ),
-                              );
-                              }
-                              
-                              
-                          if (!taskSnapshot.hasData) {
-                          return const Center(
-                            child: CircularProgressIndicator(),
-                          );
+                          return Center(child: Text(taskSnapshot.error.toString()));
                         }
 
-                        List<Map<String, dynamic>> displayedTasks = taskSnapshot
-                            .data!
-                            .docs
-                            .map(
-                              (doc) => {
-                                ...doc.data() as Map<String, dynamic>,
-                                "docId": doc.id,
-                              },
-                            )
+                        if (!taskSnapshot.hasData) {
+                          return const Center(child: CircularProgressIndicator());
+                        }
+
+                        List<Map<String, dynamic>> rawCompanyTasks = taskSnapshot.data!.docs
+                            .map((doc) => {
+                                  ...doc.data() as Map<String, dynamic>,
+                                  "docId": doc.id,
+                                  "isPersonal": false,
+                                })
                             .toList();
 
-                        displayedTasks = _getFilteredTasks(displayedTasks);
-                        debugPrint(
-                          "TASK COUNT: ${displayedTasks.length}",
-                          );
-                          
-                          if (displayedTasks.isNotEmpty) {
-                            debugPrint(
-                              displayedTasks.first.toString(),
-                              );
-                              }
+                        final uid = FirebaseAuth.instance.currentUser!.uid;
 
-                        if (displayedTasks.isEmpty) {
-                          return _buildEmptyStateView();
-                        }
-
-                        return PageView.builder(
-                          itemCount: displayedTasks.length, // Large number for infinite looping
-                          key: ValueKey(_selectedFilter),
-                          controller: _pageController,
-                          clipBehavior: Clip.none,
-                          itemBuilder: (context, index) {
-                            final int circularDataIndex =
-                                index % displayedTasks.length;
-                            double indexPositionDelta = index - _scrollOffset;
-
-                            // --- MOCKUP ARRANGEMENT TRANSFORMATIONS MATRIX ---
-                            double rotationAngle =
-                                indexPositionDelta *
-                                -0.06; // Tilted rotation factor
-                            double horizontalShift =
-                                indexPositionDelta *
-                                28.0; // Pushes cards out to right side background
-                            double verticalStackOffset =
-                                indexPositionDelta *
-                                14.0; // Lifts background layers upward
-
-                            // Downscales tracking layers behind foreground card frame
-                            double activeScaleFactor = math.max(
-                              0.82,
-                              1.0 - (indexPositionDelta.abs() * 0.05),
-                            );
-
-                            // Normalization constraint boundary layout when card leaves viewport left side
-                            if (indexPositionDelta < 0) {
-                              rotationAngle = indexPositionDelta * -0.02;
-                              horizontalShift = indexPositionDelta * 32.0;
-                              verticalStackOffset = 0.0;
+                        return StreamBuilder<QuerySnapshot>(
+                          stream: FirebaseFirestore.instance
+                              .collection('users')
+                              .doc(uid)
+                              .collection('personal_todos')
+                              .snapshots(),
+                          builder: (context, todoSnapshot) {
+                            if (!todoSnapshot.hasData) {
+                              return const Center(child: CircularProgressIndicator());
                             }
 
-                            return AnimatedBuilder(
-                              animation: _pageController,
-                              builder: (context, child) {
-                                return Transform(
-                                  transform: Matrix4.identity()
-                                    ..setEntry(
-                                      3,
-                                      2,
-                                      0.001,
-                                    ) // Deep depth perception
-                                    ..translate(
-                                      horizontalShift,
-                                      verticalStackOffset,
-                                    )
-                                    ..scale(
-                                      activeScaleFactor,
-                                      activeScaleFactor,
-                                    )
-                                    ..rotateZ(rotationAngle),
-                                  alignment: Alignment.center,
-                                  child: child,
+                            List<Map<String, dynamic>> personalTodos = todoSnapshot.data!.docs.map((doc) {
+                              final data = doc.data() as Map<String, dynamic>;
+                              return {
+                                ...data,
+                                "isPersonal": true,
+                                "docId": doc.id,
+                                "priority": data["priority"] ?? "Medium",
+                              };
+                            }).toList();
+
+                            // Merges the raw sets into a single local cache structure
+                            List<Map<String, dynamic>> unifiedTasks = List.from(rawCompanyTasks)..addAll(personalTodos);
+                            
+                            // Passes unified elements through selection filters safely
+                            final List<Map<String, dynamic>> combinedTasks = _getFilteredTasks(unifiedTasks);
+
+                            debugPrint("COMPANY COUNT: ${rawCompanyTasks.length}");
+                            debugPrint("TODOS COUNT: ${personalTodos.length}");
+                            debugPrint("FILTERED CARDS RENDERING: ${combinedTasks.length}");
+
+                            if (combinedTasks.isEmpty) {
+                              return _buildEmptyStateView();
+                            }
+
+                            return PageView.builder(
+                              itemCount: combinedTasks.length,
+                              key: ValueKey(_selectedFilter + _currentTrackingDay.toIso8601String()),
+                              controller: _pageController,
+                              clipBehavior: Clip.none,
+                              itemBuilder: (context, index) {
+                                double indexPositionDelta = index - _scrollOffset;
+
+                                // --- MOCKUP ARRANGEMENT TRANSFORMATIONS MATRIX ---
+                                double rotationAngle = indexPositionDelta * -0.06;
+                                double horizontalShift = indexPositionDelta * 28.0;
+                                double verticalStackOffset = indexPositionDelta * 14.0;
+
+                                double activeScaleFactor = math.max(
+                                  0.82,
+                                  1.0 - (indexPositionDelta.abs() * 0.05),
+                                );
+
+                                if (indexPositionDelta < 0) {
+                                  rotationAngle = indexPositionDelta * -0.02;
+                                  horizontalShift = indexPositionDelta * 32.0;
+                                  verticalStackOffset = 0.0;
+                                }
+
+                                return AnimatedBuilder(
+                                  animation: _pageController,
+                                  builder: (context, child) {
+                                    return Transform(
+                                      transform: Matrix4.identity()
+                                        ..setEntry(3, 2, 0.001)
+                                        ..translate(horizontalShift, verticalStackOffset)
+                                        ..scale(activeScaleFactor, activeScaleFactor)
+                                        ..rotateZ(rotationAngle),
+                                      alignment: Alignment.center,
+                                      child: child,
+                                    );
+                                  },
+                                  child: _buildTaskCard(combinedTasks[index]),
                                 );
                               },
-                              child: _buildTaskCard(
-                                displayedTasks[circularDataIndex],
-                              ),
                             );
                           },
                         );
@@ -397,7 +410,6 @@ if (_isLoadingContext) {
     );
   }
 
-  // Handles empty card array views safely
   Widget _buildEmptyStateView() {
     return Center(
       child: Column(
@@ -423,6 +435,8 @@ if (_isLoadingContext) {
   }
 
   Widget _buildTaskCard(Map<String, dynamic> task) {
+    final bool isPersonal = task['isPersonal'] == true;
+
     return GestureDetector(
       onTap: () {
         Navigator.push(
@@ -453,21 +467,14 @@ if (_isLoadingContext) {
                 _buildOverlappingTeamAvatars(),
                 const Spacer(),
                 Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 8,
-                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                   decoration: BoxDecoration(
                     color: Colors.white.withOpacity(0.18),
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Row(
                     children: [
-                      const Icon(
-                        Icons.access_time_filled,
-                        color: Colors.white,
-                        size: 16,
-                      ),
+                      const Icon(Icons.access_time_filled, color: Colors.white, size: 16),
                       const SizedBox(width: 6),
                       Text(
                         task['dueTime'] ?? task['time'] ?? '--',
@@ -484,31 +491,49 @@ if (_isLoadingContext) {
               ],
             ),
             const SizedBox(height: 24),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: ForgeTheme.surfaceWhite,
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(
-                    Icons.flag_rounded,
-                    color: Colors.redAccent,
-                    size: 14,
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: ForgeTheme.surfaceWhite,
+                    borderRadius: BorderRadius.circular(20),
                   ),
-                  const SizedBox(width: 4),
-                  Text(
-                    (task['priority'] ?? 'Medium').toString(),
-                    style: const TextStyle(
-                      color: Colors.redAccent,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.flag_rounded, color: Colors.redAccent, size: 14),
+                      const SizedBox(width: 4),
+                      Text(
+                        (task['priority'] ?? 'Medium').toString(),
+                        style: const TextStyle(
+                          color: Colors.redAccent,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (isPersonal) ...[
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.orange,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: const Text(
+                      "PERSONAL",
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 10,
+                      ),
                     ),
                   ),
-                ],
-              ),
+                ]
+              ],
             ),
             const SizedBox(height: 18),
             Text(
@@ -544,7 +569,7 @@ if (_isLoadingContext) {
                           ),
                         ),
                         const SizedBox(width: 14),
-                        Text(
+                        const Text(
                           "To Complete",
                           style: TextStyle(
                             color: Colors.white,
@@ -634,9 +659,7 @@ if (_isLoadingContext) {
         curve: Curves.fastOutSlowIn,
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
         decoration: BoxDecoration(
-          color: isSelected
-              ? ForgeTheme.brandBlue
-              : Colors.white.withOpacity(0.5),
+          color: isSelected ? ForgeTheme.brandBlue : Colors.white.withOpacity(0.5),
           borderRadius: BorderRadius.circular(24),
           border: Border.all(
             color: isSelected ? ForgeTheme.brandBlue : Colors.white,
@@ -662,7 +685,7 @@ if (_isLoadingContext) {
           label,
           style: TextStyle(
             color: isSelected ? Colors.white : ForgeTheme.textDark,
-            fontWeight: isSelected ? FontWeight.w600 : FontWeight.w600,
+            fontWeight: FontWeight.w600,
             fontSize: 13,
           ),
         ),
