@@ -12,7 +12,6 @@ class CalendarScreen extends StatefulWidget {
   State<CalendarScreen> createState() => _CalendarScreenState();
 }
 
-// Added WidgetsBindingObserver to detect background-to-foreground day shifts seamlessly
 class _CalendarScreenState extends State<CalendarScreen> with WidgetsBindingObserver {
   late PageController _pageController;
   double _scrollOffset = 0.0;
@@ -33,7 +32,6 @@ class _CalendarScreenState extends State<CalendarScreen> with WidgetsBindingObse
     _fetchUserCompanyContext();
   }
 
-  // Refreshes calendar anchor points back to true local time bounds
   void _refreshToCurrentDate() {
     final now = DateTime.now();
     _selectedDate = DateTime(now.year, now.month, now.day);
@@ -42,7 +40,6 @@ class _CalendarScreenState extends State<CalendarScreen> with WidgetsBindingObse
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    // If the app is resumed from background, check if the date changed overnight
     if (state == AppLifecycleState.resumed) {
       final now = DateTime.now();
       final todayMidnight = DateTime(now.year, now.month, now.day);
@@ -86,9 +83,11 @@ class _CalendarScreenState extends State<CalendarScreen> with WidgetsBindingObse
       setState(() {
         _myCompanyId = (doc.data()?['companyId'] ?? '').toString();
         
+        // Filter out completed corporate workflows instantly
         _tasksStream = FirebaseFirestore.instance
             .collection('tasks')
             .where('companyId', isEqualTo: _myCompanyId)
+            .where('isCompleted', isEqualTo: false)
             .snapshots();
             
         _isLoadingContext = false;
@@ -203,17 +202,19 @@ class _CalendarScreenState extends State<CalendarScreen> with WidgetsBindingObse
                                     Theme(
                                       data: Theme.of(context).copyWith(
                                         hoverColor: Colors.transparent,
+                                        highlightColor: Colors.transparent,
                                         splashColor: Colors.transparent,
                                       ),
                                       child: PopupMenuButton<int>(
-                                        offset: const Offset(0, 45),
+                                        offset: const Offset(0, 50),
                                         elevation: 12,
+                                        color: ForgeTheme.background,
                                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
                                         initialValue: computedYearVal,
                                         child: Container(
                                           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
                                           decoration: BoxDecoration(
-                                            color: Colors.white,
+                                            color: ForgeTheme.surfaceWhite,
                                             borderRadius: BorderRadius.circular(30),
                                             boxShadow: [
                                               BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 10, offset: const Offset(0, 4))
@@ -248,6 +249,7 @@ class _CalendarScreenState extends State<CalendarScreen> with WidgetsBindingObse
                                                 duration: const Duration(milliseconds: 200),
                                                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                                                 decoration: BoxDecoration(
+                                                  
                                                   color: isActive ? ForgeTheme.brandBlue.withOpacity(0.1) : Colors.transparent,
                                                   borderRadius: BorderRadius.circular(12),
                                                 ),
@@ -443,11 +445,12 @@ class _CalendarScreenState extends State<CalendarScreen> with WidgetsBindingObse
                   ),
                   const SizedBox(height: 30),
                   
+                  // Wrap stream builders to fetch accurate task count markers on top header triggers
                   StreamBuilder<QuerySnapshot>(
                     stream: _tasksStream,
                     builder: (context, companySnapshot) {
                       return StreamBuilder<QuerySnapshot>(
-                        stream: FirebaseFirestore.instance.collection('users').doc(uid).collection('personal_todos').snapshots(),
+                        stream: FirebaseFirestore.instance.collection('users').doc(uid).collection('personal_todos').where('isCompleted', isEqualTo: false).snapshots(),
                         builder: (context, personalSnapshot) {
                           final companyDocs = companySnapshot.hasData ? companySnapshot.data!.docs : <DocumentSnapshot>[];
                           final personalDocs = personalSnapshot.hasData ? personalSnapshot.data!.docs : <DocumentSnapshot>[];
@@ -472,8 +475,9 @@ class _CalendarScreenState extends State<CalendarScreen> with WidgetsBindingObse
                                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                                   margin: const EdgeInsets.only(bottom: 4),
                                   decoration: BoxDecoration(
-                                    color: Colors.white,
+                                    color: Colors.white.withOpacity(0.5),
                                     borderRadius: BorderRadius.circular(16),
+                                    border: Border.all(color: Colors.white, width: 1.5),
                                     boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 4, offset: const Offset(0, 2))]
                                   ),
                                   child: const Text("View full calendar", style: TextStyle(color: ForgeTheme.brandBlue, fontSize: 12, fontWeight: FontWeight.w800, letterSpacing: -0.1)),
@@ -551,7 +555,7 @@ class _CalendarScreenState extends State<CalendarScreen> with WidgetsBindingObse
                         }).toList();
 
                         return StreamBuilder<QuerySnapshot>(
-                          stream: FirebaseFirestore.instance.collection('users').doc(uid).collection('personal_todos').snapshots(),
+                          stream: FirebaseFirestore.instance.collection('users').doc(uid).collection('personal_todos').where('isCompleted', isEqualTo: false).snapshots(),
                           builder: (context, personalSnapshot) {
                             if (!personalSnapshot.hasData) {
                               return const Center(child: CircularProgressIndicator());
@@ -639,6 +643,13 @@ class _CalendarScreenState extends State<CalendarScreen> with WidgetsBindingObse
 
   Widget _buildTaskCard(Map<String, dynamic> task) {
     final bool isPersonal = task['isPersonal'] == true;
+    final String originalTitle = (task['title'] ?? 'Untitled Task').toString();
+
+    // Enforce 28 letter strict truncation limits safely
+    String truncatedTitle = originalTitle;
+    if (originalTitle.length > 28) {
+      truncatedTitle = "${originalTitle.substring(0, 28)}...";
+    }
 
     return GestureDetector(
       onTap: () {
@@ -709,26 +720,29 @@ class _CalendarScreenState extends State<CalendarScreen> with WidgetsBindingObse
               ],
             ),
             const SizedBox(height: 18),
-            Text(task['title'] ?? 'Untitled Task', style: const TextStyle(fontSize: 30, fontWeight: FontWeight.bold, color: Colors.white, height: 1.15, letterSpacing: -0.5)),
-            const Spacer(),
+            
+            // --- MATCHED DESIGN TYPOGRAPHY ---
+            Expanded(
+              child: Text(
+                truncatedTitle, 
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 28, 
+                  fontWeight: FontWeight.w700, 
+                  color: Colors.white, 
+                  height: 1.12, 
+                  letterSpacing: -0.6
+                )
+              ),
+            ),
+            
+            const SizedBox(height: 12),
             Row(
               children: [
+                // Injected the styled horizontal swiper gesture tracking widget class
                 Expanded(
-                  child: Container(
-                    height: 54,
-                    padding: const EdgeInsets.symmetric(horizontal: 6),
-                    decoration: BoxDecoration(color: Colors.white.withOpacity(0.22), borderRadius: BorderRadius.circular(30)),
-                    child: Row(
-                      children: [
-                        const CircleAvatar(radius: 21, backgroundColor: Colors.white, child: Icon(Icons.check, color: ForgeTheme.brandBlue, size: 18)),
-                        const SizedBox(width: 14),
-                        const Text("To Complete", style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 13, letterSpacing: 0.2)),
-                        const Spacer(),
-                        Icon(Icons.keyboard_double_arrow_right_rounded, color: Colors.white.withOpacity(0.7), size: 20),
-                        const SizedBox(width: 10),
-                      ],
-                    ),
-                  ),
+                  child: _SwipeToCompleteBar(task: task),
                 ),
                 const SizedBox(width: 16),
                 Container(
@@ -785,6 +799,155 @@ class _CalendarScreenState extends State<CalendarScreen> with WidgetsBindingObse
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+// --- FULLY SYNCHRONIZED COMPLETED GESTURE SLIDER (SCREENSHOT 2026-06-01 AT 5.22.35 PM FIXES) ---
+class _SwipeToCompleteBar extends StatefulWidget {
+  final Map<String, dynamic> task;
+
+  const _SwipeToCompleteBar({required this.task});
+
+  @override
+  State<_SwipeToCompleteBar> createState() => _SwipeToCompleteBarState();
+}
+
+class _SwipeToCompleteBarState extends State<_SwipeToCompleteBar> {
+  double _dragOffset = 0.0;
+  bool _isCompletedActionTriggered = false;
+
+  void _executeCompletion() async {
+    setState(() {
+      _isCompletedActionTriggered = true;
+    });
+
+    final bool isPersonal = widget.task['isPersonal'] == true;
+    final String docId = widget.task['docId'] ?? '';
+    final uid = FirebaseAuth.instance.currentUser?.uid ?? '';
+
+    try {
+      if (isPersonal) {
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(uid)
+            .collection('personal_todos')
+            .doc(docId)
+            .update({'isCompleted': true});
+      } else {
+        await FirebaseFirestore.instance
+            .collection('tasks')
+            .doc(docId)
+            .update({'isCompleted': true});
+      }
+    } catch (e) {
+      debugPrint("Error completing task on swipe: $e");
+      if (mounted) {
+        setState(() {
+          _dragOffset = 0.0;
+          _isCompletedActionTriggered = false;
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 60, 
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.22),
+        borderRadius: BorderRadius.circular(30),
+      ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final double maxSliderWidth = constraints.maxWidth;
+          const double handleButtonRadius = 42.0; 
+          final double maxDragDistance = maxSliderWidth - handleButtonRadius - 12.0;
+
+          return Stack(
+            alignment: Alignment.centerLeft,
+            children: [
+              Center(
+                    child: Opacity(
+                      opacity: math.max(0.0, 1.0 - (_dragOffset / (maxDragDistance / 1.3))),
+                      child: const Text(
+                        "   To Complete",
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 13,
+                          letterSpacing: 0.2,
+                        ),
+                      )
+                    ),
+                  ),
+
+              Positioned(
+                right: 14,
+                child: Opacity(
+                  opacity: math.max(0.0, 1.0 - (_dragOffset / maxDragDistance)),
+                  child: Icon(
+                    Icons.keyboard_double_arrow_right_rounded,
+                    color: Colors.white.withOpacity(0.7),
+                    size: 20,
+                  ),
+                ),
+              ),
+
+              AnimatedPositioned(
+                duration: _isCompletedActionTriggered ? const Duration(milliseconds: 150) : Duration.zero,
+                curve: Curves.easeOut,
+                left: _dragOffset + 6, 
+                child: GestureDetector(
+                  onHorizontalDragUpdate: (details) {
+                    if (_isCompletedActionTriggered) return;
+                    setState(() {
+                      _dragOffset += details.primaryDelta!;
+                      if (_dragOffset < 0.0) _dragOffset = 0.0;
+                      if (_dragOffset > maxDragDistance) _dragOffset = maxDragDistance;
+                    });
+                  },
+                  onHorizontalDragEnd: (details) {
+                    if (_isCompletedActionTriggered) return;
+                    
+                    if (_dragOffset >= maxDragDistance * 0.85) {
+                      setState(() => _dragOffset = maxDragDistance);
+                      _executeCompletion();
+                    } else {
+                      setState(() => _dragOffset = 0.0);
+                    }
+                  },
+                  child: Container(
+                    width: handleButtonRadius,
+                    height: handleButtonRadius,
+                    decoration: const BoxDecoration(
+                      color: Colors.white,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Center(
+                      child: _isCompletedActionTriggered
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2.5,
+                                color: ForgeTheme.brandBlue,
+                              ),
+                            )
+                          : const Icon(
+                              Icons.check,
+                              color: ForgeTheme.brandBlue, 
+                              size: 18,
+                            ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          );
+        },
       ),
     );
   }

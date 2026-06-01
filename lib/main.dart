@@ -1,6 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:neuroforge_workflow/core/constant/nav_bar.dart';
+import 'package:neuroforge_workflow/screen/admin/admin_panel.dart';
+import 'package:neuroforge_workflow/screen/admin/burnout_insight.dart';
+import 'package:neuroforge_workflow/screen/admin/employee_analytic.dart';
+import 'package:neuroforge_workflow/screen/admin/overall_analytics.dart';
+import 'package:neuroforge_workflow/screen/admin/team_overview.dart';
+import 'package:neuroforge_workflow/screen/asi%20assistant/Asi1AssistantScreen.dart';
 import 'package:neuroforge_workflow/screen/company_screen/createcompany.dart';
 import 'package:neuroforge_workflow/auth/forgotpassword.dart';
 import 'package:neuroforge_workflow/screen/company_screen/joincompany.dart';
@@ -64,6 +70,17 @@ class MyApp extends StatelessWidget {
 
         // Core App Space Target
         '/home': (context) => const MainNavigationShell(),
+
+
+        '/admin-panel': (context) => const AdminPanelScreen(),
+        '/team-overview': (context) => const TeamOverviewScreen(),
+
+        '/emp-anlytics': (context) => const EmployeeAnalyticsScreen(),
+        '/overall-analytics': (context) => const OverallAnalyticsScreen(),
+        '/burnout-insights': (context) => const BurnoutInsightsScreen(),
+
+
+        '/chat': (context) => const Asi1AssistantScreen(),
       },
     );
   }

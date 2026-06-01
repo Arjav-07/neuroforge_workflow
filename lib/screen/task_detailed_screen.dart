@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -13,7 +14,6 @@ class TaskDetailScreen extends StatefulWidget {
 }
 
 class _TaskDetailScreenState extends State<TaskDetailScreen> {
-  // Local mutable copy of state array to track dynamic checklist subtasks smoothly
   List<Map<String, dynamic>> _checklistItems = [];
   bool _isPersonalTodo = false;
   String? _documentId;
@@ -25,21 +25,21 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
   }
 
   void _parseIncomingTaskData() {
-    // Detect whether it's an enterprise broadcast or localized personal todo row
-    _isPersonalTodo = widget.task.containsKey('subtasks') || !widget.task.containsKey('companyId');
+    _isPersonalTodo = widget.task['isPersonal'] == true || widget.task.containsKey('subtasks') || !widget.task.containsKey('companyId');
     _documentId = widget.task['docId'] ?? widget.task['id'];
 
-    if (_isPersonalTodo && widget.task['subtasks'] != null) {
-      // Load real custom subtasks array created inside AddEventScreen
+    if (widget.task['subtasks'] != null && widget.task['subtasks'] is List) {
       final List<dynamic> rawSubtasks = widget.task['subtasks'];
       _checklistItems = rawSubtasks.map((item) {
-        return {
-          "title": item['title'] ?? 'Sub-task Item',
-          "isDone": item['isDone'] ?? false,
-        };
+        if (item is Map) {
+          return {
+            "title": item['title'] ?? 'Sub-task Item',
+            "isDone": item['isDone'] == true || item['isDone'] == 'true',
+          };
+        }
+        return {"title": item.toString(), "isDone": false};
       }).toList();
     } else {
-      // Default workflow mockup matrix parameters fallback for shared team tasks
       _checklistItems = [
         {"title": "Review Wiring Architecture & Logs", "isDone": true},
         {"title": "Optimize Firestore Data Rules Pipeline", "isDone": false},
@@ -49,7 +49,6 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
     }
   }
 
-  // --- UPDATES REAL-TIME CHECKLIST METRICS BACK INTO FIRESTORE ---
   void _toggleChecklistItem(int index) async {
     setState(() {
       _checklistItems[index]['isDone'] = !_checklistItems[index]['isDone'];
@@ -72,36 +71,32 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
     }
   }
 
-  // --- MARKS THE ENTIRE ENTITY AS COMPLETELY DONE ---
   void _handleCompleteMainTask() async {
     final String? uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null || _documentId == null) {
-      // If it's standard static mock data, just pop backward safely
       Navigator.pop(context);
       return;
     }
 
     try {
       if (_isPersonalTodo) {
-        // Mark personal row as true -> Triggers immediate layout disappearance from dashboard feed
         await FirebaseFirestore.instance
             .collection('users')
             .doc(uid)
             .collection('personal_todos')
             .doc(_documentId)
-            .update({'isDone': true});
+            .update({'isCompleted': true});
       } else {
-        // Complete structural company task path update mapping tracker
         await FirebaseFirestore.instance
             .collection('tasks')
             .doc(_documentId)
-            .update({'status': 'Completed'});
+            .update({'isCompleted': true});
       }
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            backgroundColor: Color(0xFF304CB1),
+            backgroundColor: ForgeTheme.brandBlue,
             content: Text("Task successfully marked as completed!"),
           ),
         );
@@ -117,17 +112,49 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
     }
   }
 
+  // --- FIXED: PARSES STRINGS SAFE AND EXTRACTS ONLY HH:mm GRID VALUES ---
+  String _formatAssignmentTime(dynamic createdAtValue) {
+    if (createdAtValue == null || createdAtValue.toString().trim().isEmpty) {
+      return "--:--";
+    }
+
+    try {
+      final String rawStr = createdAtValue.toString().trim();
+      
+      // 1. Check if the string matches ISO format or standard date format
+      DateTime? parsedDate = DateTime.tryParse(rawStr);
+      
+      // 2. Fallback regex extraction if it contains an explicit timestamp pattern
+      if (parsedDate == null) {
+        final match = RegExp(r'(\d{1,2}):(\d{2})').firstMatch(rawStr);
+        if (match != null) {
+          String hour = match.group(1)!.padLeft(2, '0');
+          String minute = match.group(2)!;
+          return "$hour:$minute";
+        }
+        return "Recent";
+      }
+
+      String hours = parsedDate.hour.toString().padLeft(2, '0');
+      String minutes = parsedDate.minute.toString().padLeft(2, '0');
+      return "$hours:$minutes"; // Returns strictly HH:mm layout framework
+
+    } catch (_) {
+      return "--:--";
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final String title = widget.task['title']?.replaceAll('\n', ' ') ?? 'Task Details';
+    final String originalTitle = (widget.task['title'] ?? 'Task Details').toString();
+    final String title = originalTitle.replaceAll('\n', ' ');
     final String priority = widget.task['priority'] ?? 'High';
-    final String time = widget.task['time'] ?? '02:00 AM';
-    final String date = widget.task['date'] ?? '14 May 2026';
+    final String time = widget.task['dueTime'] ?? widget.task['time'] ?? '02:00 AM';
+    final String date = widget.task['dueDate'] ?? widget.task['date'] ?? '14 May 2026';
     
-    // LIVE DATA PARSING: Reads real field records generated by the input forms directly
     final String description = widget.task['description'] != null && widget.task['description'].toString().trim().isNotEmpty
         ? widget.task['description'].toString()
-        : "Architect and deploy the complete system workspace analytics board data framework loop. Ensure smooth rendering operations across layered matrix cards and avoid viewport layout overflow traces.";
+        : "Architect and deploy the complete system workspace analytics board data framework loop.";
 
     final String workspaceLocation = widget.task['location'] != null && widget.task['location'].toString().trim().isNotEmpty
         ? widget.task['location'].toString()
@@ -137,7 +164,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
     double completionProgressFraction = _checklistItems.isEmpty ? 0.0 : completedCount / _checklistItems.length;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF2F1ED), 
+      backgroundColor: ForgeTheme.background, 
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
@@ -145,7 +172,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
         leading: Padding(
           padding: const EdgeInsets.only(left: 16.0),
           child: IconButton(
-            icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Color(0xFF0F172A), size: 20),
+            icon: const Icon(Icons.arrow_back_ios_new_rounded, color: ForgeTheme.textDark, size: 20),
             onPressed: () => Navigator.pop(context),
           ),
         ),
@@ -158,7 +185,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
               boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 4, offset: const Offset(0, 2))],
             ),
             child: IconButton(
-              icon: const Icon(Icons.more_horiz_rounded, color: Color(0xFF0F172A), size: 22),
+              icon: const Icon(Icons.more_horiz_rounded, color: ForgeTheme.textDark, size: 22),
               onPressed: () {},
             ),
           ),
@@ -204,24 +231,92 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                     const SizedBox(height: 24),
                     Text(
                       title,
-                      style: const TextStyle(fontSize: 32, fontWeight: FontWeight.w900, color: Color(0xFF0F172A), letterSpacing: -0.8, height: 1.15),
+                      style: const TextStyle(fontSize: 32, fontWeight: FontWeight.w900, color: ForgeTheme.textDark, letterSpacing: -0.8, height: 1.15),
                     ),
                     const SizedBox(height: 8),
                     Row(
                       children: [
-                        Container(width: 8, height: 8, decoration: const BoxDecoration(color: Color(0xFF304CB1), shape: BoxShape.circle)),
+                        Container(width: 8, height: 8, decoration: const BoxDecoration(color: ForgeTheme.brandBlue, shape: BoxShape.circle)),
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
                             _isPersonalTodo ? "Personal Tasks Desk Space" : workspaceLocation, 
-                            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Color(0xFF64748B), letterSpacing: -0.1),
+                            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: ForgeTheme.textMuted, letterSpacing: -0.1),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 32),
+                    const SizedBox(height: 24),
+
+                    // --- ASYNC DYNAMIC CREATOR PROFILE VIEW CARD ---
+                    FutureBuilder<DocumentSnapshot>(
+                      future: FirebaseFirestore.instance
+                          .collection('users')
+                          .doc(widget.task['createdBy'].toString())
+                          .get(),
+                      builder: (context, userSnapshot) {
+                        String finalName = "Workspace Creator";
+                        String finalRole = (widget.task['category'] ?? "Management").toUpperCase();
+
+                        if (userSnapshot.hasData && userSnapshot.data!.exists) {
+                          final userData = userSnapshot.data!.data() as Map<String, dynamic>?;
+                          finalName = userData?['username'] ?? userData?['name'] ?? "Workspace Creator";
+                          finalRole = (userData?['role'] ?? finalRole).toUpperCase();
+                        }
+
+                        // If the database already stored a pre-formatted direct string, bypass lookup constraints
+                        if (widget.task['createdBy'] != null && widget.task['createdBy'].toString().length > 20 == false) {
+                          finalName = widget.task['createdBy'].toString();
+                        }
+
+                        return Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(20),
+                            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.015), blurRadius: 8, offset: const Offset(0, 2))],
+                          ),
+                          child: Row(
+                            children: [
+                              CircleAvatar(
+                                radius: 20,
+                                backgroundColor: ForgeTheme.brandBlue.withOpacity(0.1),
+                                child: const Icon(Icons.assignment_ind_rounded, color: ForgeTheme.brandBlue, size: 20),
+                              ),
+                              const SizedBox(width: 14),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text.rich(
+                                      TextSpan(
+                                        text: finalName,
+                                        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: ForgeTheme.textDark),
+                                        children: [
+                                          TextSpan(
+                                            text: " ($finalRole)",
+                                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: ForgeTheme.brandBlue),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      "Assigned at ${_formatAssignmentTime(widget.task['createdAt'])}", // Formatted cleanly to HH:mm
+                                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: ForgeTheme.textMuted),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+
+                    const SizedBox(height: 24),
                     Container(
                       padding: const EdgeInsets.all(20),
                       decoration: BoxDecoration(
@@ -240,24 +335,24 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                       ),
                     ),
                     const SizedBox(height: 32),
-                    const Text("Description", style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900, color: Color(0xFF0F172A), letterSpacing: -0.2)),
+                    const Text("Description", style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900, color: ForgeTheme.textDark, letterSpacing: -0.2)),
                     const SizedBox(height: 10),
                     Text(
                       description,
-                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: const Color(0xFF0F172A).withOpacity(0.55), height: 1.45),
+                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: ForgeTheme.textDark.withOpacity(0.55), height: 1.45),
                     ),
                     const SizedBox(height: 32),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text("Checklist Matrix", style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900, color: Color(0xFF0F172A), letterSpacing: -0.2)),
-                        Text("$completedCount/${_checklistItems.length} Done", style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: Color(0xFF304CB1))),
+                        const Text("Checklist Matrix", style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900, color: ForgeTheme.textDark, letterSpacing: -0.2)),
+                        Text("$completedCount/${_checklistItems.length} Done", style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: ForgeTheme.brandBlue)),
                       ],
                     ),
                     const SizedBox(height: 12),
                     ClipRRect(
                       borderRadius: BorderRadius.circular(10),
-                      child: LinearProgressIndicator(value: completionProgressFraction, minHeight: 6, backgroundColor: Colors.white, valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF304CB1))),
+                      child: LinearProgressIndicator(value: completionProgressFraction, minHeight: 6, backgroundColor: Colors.white, valueColor: const AlwaysStoppedAnimation<Color>(ForgeTheme.brandBlue)),
                     ),
                     const SizedBox(height: 16),
                     
@@ -266,7 +361,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                             padding: const EdgeInsets.symmetric(vertical: 12.0),
                             child: Text(
                               "No subtasks broken down for this item.",
-                              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: const Color(0xFF0F172A).withOpacity(0.35)),
+                              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: ForgeTheme.textDark.withOpacity(0.35)),
                             ),
                           )
                         : ListView.builder(
@@ -293,9 +388,9 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                                         duration: const Duration(milliseconds: 200),
                                         width: 22, height: 22,
                                         decoration: BoxDecoration(
-                                          color: isDone ? const Color(0xFF304CB1) : Colors.transparent,
+                                          color: isDone ? ForgeTheme.brandBlue : Colors.transparent,
                                           shape: BoxShape.circle,
-                                          border: Border.all(color: isDone ? const Color(0xFF304CB1) : const Color(0xFF304CB1).withOpacity(0.4), width: 2),
+                                          border: Border.all(color: isDone ? ForgeTheme.brandBlue : ForgeTheme.brandBlue.withOpacity(0.4), width: 2),
                                         ),
                                         child: isDone ? const Icon(Icons.check, size: 14, color: Colors.white) : null,
                                       ),
@@ -306,7 +401,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                                           style: TextStyle(
                                               fontSize: 14, 
                                               fontWeight: FontWeight.w700, 
-                                              color: isDone ? const Color(0xFF0F172A).withOpacity(0.35) : const Color(0xFF0F172A), 
+                                              color: isDone ? ForgeTheme.textDark.withOpacity(0.35) : ForgeTheme.textDark, 
                                               decoration: isDone ? TextDecoration.lineThrough : null),
                                         ),
                                       ),
@@ -321,51 +416,55 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                 ),
               ),
             ),
-            Container(
-              padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
-              decoration: BoxDecoration(color: const Color(0xFFF2F1ED), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.015), blurRadius: 20, offset: const Offset(0, -10))]),
-              child: Row(
-                children: [
-                  Expanded(
-                    flex: 2,
-                    child: Container(
-                      height: 56,
-                      padding: const EdgeInsets.symmetric(horizontal: 20),
-                      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(30), border: Border.all(color: Colors.black.withOpacity(0.03))),
-                      child: Row(
-                        children: [
-                          Icon(Icons.chat_bubble_outline_rounded, color: const Color(0xFF0F172A).withOpacity(0.3), size: 18),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: TextField(
-                              decoration: InputDecoration(hintText: "Add comment...", hintStyle: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A).withOpacity(0.3)), border: InputBorder.none),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    flex: 3,
-                    child: GestureDetector(
-                      onTap: _handleCompleteMainTask,
+            
+            Padding(
+              padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+              child: Container(
+                padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
+                decoration: BoxDecoration(color: ForgeTheme.background, boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.015), blurRadius: 20, offset: const Offset(0, -10))]),
+                child: Row(
+                  children: [
+                    Expanded(
+                      flex: 2,
                       child: Container(
                         height: 56,
-                        decoration: BoxDecoration(color: const Color(0xFF304CB1), borderRadius: BorderRadius.circular(30), boxShadow: [BoxShadow(color: const Color(0xFF304CB1).withOpacity(0.3), blurRadius: 16, offset: const Offset(0, 6))]),
-                        child: const Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          mainAxisSize: MainAxisSize.min,
+                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(30), border: Border.all(color: Colors.black.withOpacity(0.03))),
+                        child: Row(
                           children: [
-                            Icon(Icons.check_circle_outline_rounded, color: Colors.white, size: 18),
-                            SizedBox(width: 8),
-                            Text("Complete Task", style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: Colors.white)),
+                            Icon(Icons.chat_bubble_outline_rounded, color: ForgeTheme.textDark.withOpacity(0.3), size: 18),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: TextField(
+                                decoration: InputDecoration(hintText: "Add comment...", hintStyle: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: ForgeTheme.textDark.withOpacity(0.3)), border: InputBorder.none),
+                              ),
+                            ),
                           ],
                         ),
                       ),
                     ),
-                  ),
-                ],
+                    const SizedBox(width: 14),
+                    Expanded(
+                      flex: 3,
+                      child: GestureDetector(
+                        onTap: _handleCompleteMainTask,
+                        child: Container(
+                          height: 56,
+                          decoration: BoxDecoration(color: ForgeTheme.brandBlue, borderRadius: BorderRadius.circular(30), boxShadow: [BoxShadow(color: ForgeTheme.brandBlue.withOpacity(0.3), blurRadius: 16, offset: const Offset(0, 6))]),
+                          child: const Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.check_circle_outline_rounded, color: Colors.white, size: 18),
+                              SizedBox(width: 8),
+                              Text("Complete Task", style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: Colors.white)),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ],
@@ -379,8 +478,8 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
       children: [
         Container(
           padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(color: const Color(0xFFF2F1ED).withOpacity(0.7), borderRadius: BorderRadius.circular(14)),
-          child: Icon(icon, color: const Color(0xFF304CB1), size: 18),
+          decoration: BoxDecoration(color: ForgeTheme.background.withOpacity(0.7), borderRadius: BorderRadius.circular(14)),
+          child: Icon(icon, color: ForgeTheme.brandBlue, size: 18),
         ),
         const SizedBox(width: 12),
         Expanded(
@@ -389,9 +488,9 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
             mainAxisSize: MainAxisSize.min,
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Text(headerText, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: const Color(0xFF0F172A).withOpacity(0.3), letterSpacing: 0.6)),
+              Text(headerText, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: ForgeTheme.textDark.withOpacity(0.3), letterSpacing: 0.6)),
               const SizedBox(height: 2),
-              Text(infoValue, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: Color(0xFF0F172A), letterSpacing: -0.1)),
+              Text(infoValue, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: ForgeTheme.textDark, letterSpacing: -0.1)),
             ],
           ),
         ),
@@ -417,7 +516,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
     return Positioned(
       left: leftOffset,
       child: Container(
-        decoration: const BoxDecoration(shape: BoxShape.circle, color: Color(0xFFF2F1ED)),
+        decoration: const BoxDecoration(shape: BoxShape.circle, color: Colors.transparent),
         padding: const EdgeInsets.all(2),
         child: CircleAvatar(radius: 16, backgroundColor: ForgeTheme.surfaceWhite, backgroundImage: AssetImage(assetPath)),
       ),

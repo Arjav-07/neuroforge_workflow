@@ -14,12 +14,10 @@ class _AddEventScreenState extends State<AddEventScreen> {
   final TextEditingController _titleController = TextEditingController();
   final TextEditingController _locationController = TextEditingController();
   final TextEditingController _descriptionController = TextEditingController();
-  final TextEditingController _todoChecklistItemController =
-      TextEditingController();
+  final TextEditingController _todoChecklistItemController = TextEditingController();
 
   bool _isGroupEventMode = false;
-  String _selectedCategory =
-      "Work"; // Maps seamlessly to new home screen chip filters!
+  String _selectedCategory = "Work"; 
   String _selectedPriority = "Medium";
 
   String _userRole = "TEAM MEMBER";
@@ -31,7 +29,7 @@ class _AddEventScreenState extends State<AddEventScreen> {
   final List<String> _selectedAssigneeIds = [];
   final List<String> _localTodoSubtasks = [];
 
-  DateTime _pickedDate = DateTime(2026, 5, 30);
+  DateTime _pickedDate = DateTime.now();
   TimeOfDay _pickedTime = const TimeOfDay(hour: 11, minute: 0);
 
   @override
@@ -61,8 +59,9 @@ class _AddEventScreenState extends State<AddEventScreen> {
 
       _isParticipantDropdownOpen = false;
       _selectedCategory = "Work";
+      _selectedPriority = "Medium";
 
-      _pickedDate = DateTime(2026, 5, 30);
+      _pickedDate = DateTime.now();
       _pickedTime = const TimeOfDay(hour: 11, minute: 0);
     });
 
@@ -111,9 +110,7 @@ class _AddEventScreenState extends State<AddEventScreen> {
                   final employeeData = d.data();
                   String displayName = employeeData['username'] ?? '';
                   if (displayName.isEmpty && employeeData['email'] != null) {
-                    displayName = employeeData['email'].toString().split(
-                      '@',
-                    )[0];
+                    displayName = employeeData['email'].toString().split('@')[0];
                   }
                   if (displayName.isEmpty) displayName = 'Team Member';
                   return {
@@ -151,8 +148,9 @@ class _AddEventScreenState extends State<AddEventScreen> {
         );
       },
     );
-    if (picked != null && picked != _pickedDate)
+    if (picked != null && picked != _pickedDate) {
       setState(() => _pickedDate = picked);
+    }
   }
 
   Future<void> _selectTargetTime(BuildContext context) async {
@@ -172,38 +170,38 @@ class _AddEventScreenState extends State<AddEventScreen> {
         );
       },
     );
-    if (picked != null && picked != _pickedTime)
+    if (picked != null && picked != _pickedTime) {
       setState(() => _pickedTime = picked);
+    }
   }
 
   void _handleSubmitTask() async {
     final String enteredTitle = _titleController.text.trim();
     if (enteredTitle.isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text("Please enter a title.")));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Please enter a title.")),
+      );
       return;
     }
 
     final User? user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
 
-    String dateKey =
-        "${_pickedDate.year}-${_pickedDate.month.toString().padLeft(2, '0')}-${_pickedDate.day.toString().padLeft(2, '0')}";
+    String dateKey = "${_pickedDate.year}-${_pickedDate.month.toString().padLeft(2, '0')}-${_pickedDate.day.toString().padLeft(2, '0')}";
     String timeKey = _pickedTime.format(context);
+
+    final subtaskListMap = _localTodoSubtasks.map((t) => {"title": t, "isDone": false}).toList();
 
     try {
       if (_isGroupEventMode) {
-        final newGlobalEventRef = FirebaseFirestore.instance
-            .collection('tasks')
-            .doc();
+        final newGlobalEventRef = FirebaseFirestore.instance.collection('tasks').doc();
         final String taskId = newGlobalEventRef.id;
-
         final String taskNumber = "NF-${DateTime.now().millisecondsSinceEpoch}";
+
         await newGlobalEventRef.set({
           "taskId": taskId,
           "taskNumber": taskNumber,
-          "title": _titleController.text.trim(),
+          "title": enteredTitle,
           "location": _locationController.text.trim(),
           "description": _descriptionController.text.trim(),
           "priority": _selectedPriority,
@@ -225,6 +223,7 @@ class _AddEventScreenState extends State<AddEventScreen> {
           "createdBy": user.uid,
           "companyId": _myCompanyId,
           "assignedTo": _selectedAssigneeIds,
+          "subtasks": subtaskListMap,
           "createdAt": FieldValue.serverTimestamp(),
           "completedAt": null,
         });
@@ -238,7 +237,8 @@ class _AddEventScreenState extends State<AddEventScreen> {
 
         await newPersonalTodoRef.set({
           "todoId": todoId,
-          "title": _titleController.text.trim(),
+          "title": enteredTitle,
+          "description": _descriptionController.text.trim(),
           "date": dateKey,
           "time": timeKey,
           "category": "Personal",
@@ -246,13 +246,8 @@ class _AddEventScreenState extends State<AddEventScreen> {
           "status": "pending",
           "priority": "Medium",
           "companyId": _myCompanyId,
-          "subtasks": _localTodoSubtasks
-
-              .map((t) => {"title": t, "isDone": false})
-              .toList(),
-
+          "subtasks": subtaskListMap,
           "createdAt": FieldValue.serverTimestamp(),
-
           "completedAt": null,
         });
       }
@@ -271,7 +266,7 @@ class _AddEventScreenState extends State<AddEventScreen> {
         _clearWholeFormFields();
       }
     } catch (e) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             behavior: SnackBarBehavior.floating,
@@ -279,29 +274,22 @@ class _AddEventScreenState extends State<AddEventScreen> {
             content: Text("Database Error: $e"),
           ),
         );
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final User? currentUser = FirebaseAuth.instance.currentUser;
-    final String normalizedRole = _userRole.toUpperCase();
-    final bool canCreateGroupTasks =
-        normalizedRole == "OWNER" ||
-        normalizedRole == "ADMIN" ||
-        normalizedRole == "PROJECT MANAGER";
 
-    String formattedDateText =
-        "${_pickedDate.day} ${_getMonthNameShort(_pickedDate.month)} ${_pickedDate.year}";
+    String formattedDateText = "${_pickedDate.day} ${_getMonthNameShort(_pickedDate.month)} ${_pickedDate.year}";
     String formattedTimeText = _pickedTime.format(context);
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF2F1ED),
+      backgroundColor: ForgeTheme.background,
       body: SafeArea(
         child: _isLoadingRole
-            ? const Center(
-                child: CircularProgressIndicator(color: ForgeTheme.brandBlue),
-              )
+            ? const Center(child: CircularProgressIndicator(color: ForgeTheme.brandBlue))
             : SingleChildScrollView(
                 physics: const BouncingScrollPhysics(),
                 padding: const EdgeInsets.symmetric(horizontal: 24.0),
@@ -314,29 +302,11 @@ class _AddEventScreenState extends State<AddEventScreen> {
                         Container(
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withOpacity(0.06),
-                                blurRadius: 12,
-                                offset: const Offset(0, 4),
-                              ),
-                            ],
+                            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 12, offset: const Offset(0, 4))],
                           ),
                           child: Container(
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              border: Border.all(
-                                color: ForgeTheme.surfaceWhite,
-                                width: 2,
-                              ),
-                            ),
-                            child: const CircleAvatar(
-                              radius: 24,
-                              backgroundColor: ForgeTheme.surfaceWhite,
-                              backgroundImage: AssetImage(
-                                "assets/images/profile_avatar.png",
-                              ),
-                            ),
+                            decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: ForgeTheme.surfaceWhite, width: 2)),
+                            child: const CircleAvatar(radius: 24, backgroundColor: ForgeTheme.surfaceWhite, backgroundImage: AssetImage("assets/images/profile_avatar.png")),
                           ),
                         ),
                         const SizedBox(width: 14),
@@ -346,100 +316,54 @@ class _AddEventScreenState extends State<AddEventScreen> {
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               Text(
-                                (currentUser?.displayName ?? "User")
-                                    .toUpperCase(),
-                                style: const TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
-                                  color: ForgeTheme.textDark,
-                                  letterSpacing: -0.3,
-                                ),
+                                (currentUser?.displayName ?? "User").toUpperCase(),
+                                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: ForgeTheme.textDark, letterSpacing: -0.3),
                               ),
                               const SizedBox(height: 2),
                               Text(
                                 _userRole.toUpperCase(),
-                                style: const TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w700,
-                                  color: ForgeTheme.brandBlue,
-                                  letterSpacing: 0.8,
-                                ),
+                                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: ForgeTheme.brandBlue, letterSpacing: 0.8),
                               ),
                             ],
                           ),
                         ),
-                        _buildHeaderIconButton(
-                          "assets/icons/chat.png",
-                          Icons.chat_bubble_outline_rounded,
-                        ),
+                        _buildHeaderIconButton("assets/icons/chat.png", Icons.chat_bubble_outline_rounded),
                         const SizedBox(width: 12),
-                        _buildHeaderIconButton(
-                          "assets/icons/notification.png",
-                          Icons.notifications_none_rounded,
-                        ),
+                        _buildHeaderIconButton("assets/icons/notification.png", Icons.notifications_none_rounded),
                       ],
                     ),
                     const SizedBox(height: 30),
-                    const Text(
-                      "Create",
-                      style: TextStyle(
-                        fontSize: 30,
-                        fontWeight: FontWeight.w800,
-                        color: ForgeTheme.textDark,
-                        height: 0.9,
-                      ),
-                    ),
+                    const Text("Create", style: TextStyle(fontSize: 30, fontWeight: FontWeight.w800, color: ForgeTheme.textDark, height: 0.9)),
                     Text(
                       _isGroupEventMode ? "Group Task" : "Personal To-Do",
-                      style: TextStyle(
-                        fontSize: 30,
-                        fontWeight: FontWeight.w800,
-                        color: ForgeTheme.textDark.withOpacity(0.35),
-                      ),
+                      style: TextStyle(fontSize: 30, fontWeight: FontWeight.w800, color: ForgeTheme.textDark.withOpacity(0.35)),
                     ),
                     const SizedBox(height: 24),
                     Container(
                       padding: const EdgeInsets.all(6),
                       decoration: BoxDecoration(
                         color: ForgeTheme.surfaceWhite.withOpacity(0.5),
-                        border: Border.all(
-                          color: ForgeTheme.surfaceWhite,
-                          width: 2,
-                        ),
+                        border: Border.all(color: ForgeTheme.surfaceWhite, width: 2),
                         borderRadius: BorderRadius.circular(32),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.04),
-                            blurRadius: 8,
-                            offset: const Offset(0, 2),
-                          ),
-                        ],
+                        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 8, offset: const Offset(0, 2))],
                       ),
                       child: Row(
                         children: [
                           Expanded(
                             child: GestureDetector(
                               onTap: () {
-                                if (canCreateGroupTasks) {
+                                if (_userRole.toUpperCase() == "OWNER" || _userRole.toUpperCase() == "ADMIN" || _userRole.toUpperCase() == "PROJECT MANAGER") {
                                   setState(() => _isGroupEventMode = true);
                                 } else {
                                   ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                      content: Text(
-                                        "Standard team accounts are restricted to creating personal to-dos.",
-                                      ),
-                                    ),
+                                    const SnackBar(content: Text("Standard team accounts are restricted to creating personal to-dos.")),
                                   );
                                 }
                               },
                               child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 12,
-                                ),
+                                padding: const EdgeInsets.symmetric(vertical: 12),
                                 decoration: BoxDecoration(
-                                  color: _isGroupEventMode
-                                      ? ForgeTheme.brandBlue
-                                      : Colors.transparent,
+                                  color: _isGroupEventMode ? ForgeTheme.brandBlue : Colors.transparent,
                                   borderRadius: BorderRadius.circular(24),
                                 ),
                                 child: Center(
@@ -448,9 +372,7 @@ class _AddEventScreenState extends State<AddEventScreen> {
                                     style: TextStyle(
                                       fontWeight: FontWeight.w600,
                                       fontSize: 13,
-                                      color: _isGroupEventMode
-                                          ? Colors.white
-                                          : Colors.black.withOpacity(0.4),
+                                      color: _isGroupEventMode ? Colors.white : Colors.black.withOpacity(0.4),
                                     ),
                                   ),
                                 ),
@@ -459,23 +381,13 @@ class _AddEventScreenState extends State<AddEventScreen> {
                           ),
                           Expanded(
                             child: GestureDetector(
-                              onTap: () =>
-                                  setState(() => _isGroupEventMode = false),
+                              onTap: () => setState(() => _isGroupEventMode = false),
                               child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 12,
-                                ),
+                                padding: const EdgeInsets.symmetric(vertical: 12),
                                 decoration: BoxDecoration(
-                                  color: !_isGroupEventMode
-                                      ? ForgeTheme.brandBlue
-                                      : Colors.transparent,
+                                  color: !_isGroupEventMode ? ForgeTheme.brandBlue : Colors.transparent,
                                   borderRadius: BorderRadius.circular(24),
-                                  border: Border.all(
-                                    color: !_isGroupEventMode
-                                        ? Colors.white
-                                        : Colors.transparent,
-                                    width: 2,
-                                  ),
+                                  border: Border.all(color: !_isGroupEventMode ? Colors.white : Colors.transparent, width: 2),
                                 ),
                                 child: Center(
                                   child: Text(
@@ -483,9 +395,7 @@ class _AddEventScreenState extends State<AddEventScreen> {
                                     style: TextStyle(
                                       fontWeight: FontWeight.w600,
                                       fontSize: 13,
-                                      color: !_isGroupEventMode
-                                          ? Colors.white
-                                          : Colors.black.withOpacity(0.4),
+                                      color: !_isGroupEventMode ? Colors.white : Colors.black.withOpacity(0.4),
                                     ),
                                   ),
                                 ),
@@ -499,22 +409,18 @@ class _AddEventScreenState extends State<AddEventScreen> {
                     Container(
                       padding: const EdgeInsets.all(20),
                       decoration: BoxDecoration(
-                        color: const Color(0xFFE2E1DD),
+                        color:  Colors.white.withOpacity(0.5),
                         border: Border.all(color: Colors.white, width: 2),
                         borderRadius: BorderRadius.circular(28),
                       ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          _buildInputFieldLabel(
-                            _isGroupEventMode ? "Task Title" : "To-Do Name",
-                          ),
+                          _buildInputFieldLabel(_isGroupEventMode ? "Task Title" : "To-Do Name"),
                           _buildStyledTextField(
                             _titleController,
-                            _isGroupEventMode
-                                ? "Enter task title"
-                                : "What needs to be done?",
-                            Icons.add_box_rounded,
+                            _isGroupEventMode ? "Enter task title" : "What needs to be done?",
+                            "assets/icons/event_active.png", // Image Asset Path
                             isMultiLine: false,
                           ),
                           const SizedBox(height: 16),
@@ -526,7 +432,7 @@ class _AddEventScreenState extends State<AddEventScreen> {
                                   children: [
                                     _buildInputFieldLabel("Target Date"),
                                     _buildPickerTile(
-                                      Icons.calendar_today_rounded,
+                                      "assets/icons/cal_active.png", // Image Asset Path
                                       formattedDateText,
                                       () => _selectTargetDate(context),
                                     ),
@@ -540,7 +446,7 @@ class _AddEventScreenState extends State<AddEventScreen> {
                                   children: [
                                     _buildInputFieldLabel("Alert Time"),
                                     _buildPickerTile(
-                                      Icons.access_time_filled_rounded,
+                                      "assets/icons/clock.png", // Image Asset Path
                                       formattedTimeText,
                                       () => _selectTargetTime(context),
                                     ),
@@ -549,250 +455,143 @@ class _AddEventScreenState extends State<AddEventScreen> {
                               ),
                             ],
                           ),
-                          AnimatedSize(
-                            duration: const Duration(milliseconds: 300),
-                            curve: Curves.easeInOut,
-                            child: _isGroupEventMode
-                                ? Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      const SizedBox(height: 16),
-                                      _buildInputFieldLabel("Priority"),
-                                      const SizedBox(height: 6),
+                          
+                          if (_isGroupEventMode) ...[
+                            const SizedBox(height: 16),
+                            _buildInputFieldLabel("Priority"),
+                            const SizedBox(height: 6),
+                            SingleChildScrollView(
+                              scrollDirection: Axis.horizontal,
+                              child: Row(
+                                children: [
+                                  _buildPriorityChip("Low", _selectedPriority, () => setState(() => _selectedPriority = "Low")),
+                                  _buildPriorityChip("Medium", _selectedPriority, () => setState(() => _selectedPriority = "Medium")),
+                                  _buildPriorityChip("High", _selectedPriority, () => setState(() => _selectedPriority = "High")),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                            _buildInputFieldLabel("Task Type / Category"),
+                            const SizedBox(height: 6),
+                            SingleChildScrollView(
+                              scrollDirection: Axis.horizontal,
+                              physics: const BouncingScrollPhysics(),
+                              child: Row(
+                                children: [
+                                  _buildCategoryChip("Work"),
+                                  _buildCategoryChip("Meeting"),
+                                  _buildCategoryChip("Others"),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                            _buildInputFieldLabel("Target Location"),
+                            _buildStyledTextField(_locationController, "Enter location/URL", "assets/icons/location.png", isMultiLine: false),
+                            const SizedBox(height: 16),
+                            _buildInputFieldLabel("Context Description"),
+                            _buildStyledTextField(_descriptionController, "Add technical specs or rules", "assets/icons/text.png", isMultiLine: true),
+                            const SizedBox(height: 16),
+                            _buildInputFieldLabel("Assign Project Participants"),
+                            _buildCorporateParticipantDropdown(),
+                          ] else ...[
+                            const SizedBox(height: 16),
+                            _buildInputFieldLabel("Context Description"),
+                            _buildStyledTextField(_descriptionController, "Add important personal notes", "assets/icons/text.png", isMultiLine: true),
+                          ],
 
-                                      SingleChildScrollView(
-                                        scrollDirection: Axis.horizontal,
-                                        child: Row(
-                                          children: [
-                                            _buildPriorityChip(
-                                              "Low",
-                                              _selectedPriority,
-                                              () => setState(
-                                                () => _selectedPriority = "Low",
-                                              ),
-                                            ),
-                                            _buildPriorityChip(
-                                              "Medium",
-                                              _selectedPriority,
-                                              () => setState(
-                                                () => _selectedPriority = "Medium",
-                                              ),
-                                            ),
-                                            _buildPriorityChip(
-                                              "High",
-                                              _selectedPriority,
-                                              () => setState(
-                                                () =>
-                                                    _selectedPriority = "High",
-                                              ),
-                                            ),
-                                          ],
+                          const SizedBox(height: 16),
+                          _buildInputFieldLabel("Breakdown Checklist Items (Sub-Tasks)"),
+                          Container(
+                            height: 52,
+                            padding: const EdgeInsets.symmetric(horizontal: 6),
+                            decoration: BoxDecoration(color: ForgeTheme.background, borderRadius: BorderRadius.circular(26)),
+                            child: Row(
+                              children: [
+                                CircleAvatar(
+                                  radius: 20,
+                                  backgroundColor: ForgeTheme.brandBlue,
+                                  child: Transform.scale(
+                                    scale: 0.5,
+                                    child: Image.asset("assets/icons/add.png", color: Colors.white),
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: TextField(
+                                    controller: _todoChecklistItemController,
+                                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: ForgeTheme.textDark),
+                                    decoration: InputDecoration(
+                                      hintText: "Add sub-task...",
+                                      hintStyle: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: const Color(0xFF0F172A).withOpacity(0.3)),
+                                      border: InputBorder.none,
+                                    ),
+                                    onSubmitted: (value) {
+                                      if (value.trim().isNotEmpty) {
+                                        setState(() {
+                                          _localTodoSubtasks.add(value.trim());
+                                          _todoChecklistItemController.clear();
+                                        });
+                                      }
+                                    },
+                                  ),
+                                ),
+                                IconButton(
+                                  icon: Transform.scale(
+                                    scale: 0.6,
+                                    child: Image.asset("assets/icons/add.png", color: ForgeTheme.brandBlue),
+                                  ),
+                                  onPressed: () {
+                                    if (_todoChecklistItemController.text.trim().isNotEmpty) {
+                                      setState(() {
+                                        _localTodoSubtasks.add(_todoChecklistItemController.text.trim());
+                                        _todoChecklistItemController.clear();
+                                      });
+                                    }
+                                  },
+                                ),
+                              ],
+                            ),
+                          ),
+                          if (_localTodoSubtasks.isNotEmpty) ...[
+                            const SizedBox(height: 12),
+                            Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(color: Colors.white.withOpacity(0.5), borderRadius: BorderRadius.circular(16)),
+                              child: ListView.builder(
+                                shrinkWrap: true,
+                                physics: const NeverScrollableScrollPhysics(),
+                                itemCount: _localTodoSubtasks.length,
+                                itemBuilder: (context, index) {
+                                  return Padding(
+                                    padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 6.0),
+                                    child: Row(
+                                      children: [
+                                        Transform.scale(
+                                          scale: 0.8,
+                                          child: Image.asset("assets/icons/radio_off.png", color: ForgeTheme.brandBlue),
                                         ),
-                                      ),
-
-                                      const SizedBox(height: 16),
-                                      _buildInputFieldLabel(
-                                        "Task Workspace Scope",
-                                      ),
-
-                                      const SizedBox(height: 6),
-                                      SingleChildScrollView(
-                                        scrollDirection: Axis.horizontal,
-                                        physics: const BouncingScrollPhysics(),
-                                        child: Row(
-                                          children: [
-                                            _buildCategoryChip("Work"),
-                                            _buildCategoryChip("Meeting"),
-                                            _buildCategoryChip("Others"),
-                                          ],
-                                        ),
-                                      ),
-                                      const SizedBox(height: 16),
-                                      _buildInputFieldLabel("Target Location"),
-                                      _buildStyledTextField(
-                                        _locationController,
-                                        "Enter workspace branch/URL",
-                                        Icons.location_on_rounded,
-                                        isMultiLine: false,
-                                      ),
-                                      const SizedBox(height: 16),
-                                      _buildInputFieldLabel(
-                                        "Context Description",
-                                      ),
-                                      _buildStyledTextField(
-                                        _descriptionController,
-                                        "Add technical specs or rules ",
-                                        Icons.text_fields_rounded,
-                                        isMultiLine: true,
-                                      ),
-                                      const SizedBox(height: 16),
-                                      _buildInputFieldLabel(
-                                        "Assign Project Participants",
-                                      ),
-                                      _buildCorporateParticipantDropdown(),
-                                    ],
-                                  )
-                                : Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      const SizedBox(height: 16),
-                                      _buildInputFieldLabel(
-                                        "Breakdown Checklist Items (Sub-Tasks)",
-                                      ),
-                                      Container(
-                                        height: 52,
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 6,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: Colors.white,
-                                          borderRadius: BorderRadius.circular(
-                                            26,
+                                        const SizedBox(width: 10),
+                                        Expanded(
+                                          child: Text(
+                                            _localTodoSubtasks[index],
+                                            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: ForgeTheme.textDark),
                                           ),
                                         ),
-                                        child: Row(
-                                          children: [
-                                            const CircleAvatar(
-                                              radius: 20,
-                                              backgroundColor:
-                                                  ForgeTheme.brandBlue,
-                                              child: Icon(
-                                                Icons.playlist_add_rounded,
-                                                color: Colors.white,
-                                                size: 18,
-                                              ),
-                                            ),
-                                            const SizedBox(width: 12),
-                                            Expanded(
-                                              child: TextField(
-                                                controller:
-                                                    _todoChecklistItemController,
-                                                style: const TextStyle(
-                                                  fontSize: 14,
-                                                  fontWeight: FontWeight.w700,
-                                                  color: ForgeTheme.textDark,
-                                                ),
-                                                decoration: InputDecoration(
-                                                  hintText: "Add sub-task...",
-                                                  hintStyle: TextStyle(
-                                                    fontSize: 14,
-                                                    fontWeight: FontWeight.w600,
-                                                    color: const Color(
-                                                      0xFF0F172A,
-                                                    ).withOpacity(0.3),
-                                                  ),
-                                                  border: InputBorder.none,
-                                                ),
-                                                onSubmitted: (value) {
-                                                  if (value.trim().isNotEmpty) {
-                                                    setState(() {
-                                                      _localTodoSubtasks.add(
-                                                        value.trim(),
-                                                      );
-                                                      _todoChecklistItemController
-                                                          .clear();
-                                                    });
-                                                  }
-                                                },
-                                              ),
-                                            ),
-                                            IconButton(
-                                              icon: const Icon(
-                                                Icons.add_circle_rounded,
-                                                color: ForgeTheme.brandBlue,
-                                                size: 26,
-                                              ),
-                                              onPressed: () {
-                                                if (_todoChecklistItemController
-                                                    .text
-                                                    .trim()
-                                                    .isNotEmpty) {
-                                                  setState(() {
-                                                    _localTodoSubtasks.add(
-                                                      _todoChecklistItemController
-                                                          .text
-                                                          .trim(),
-                                                    );
-                                                    _todoChecklistItemController
-                                                        .clear();
-                                                  });
-                                                }
-                                              },
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                      if (_localTodoSubtasks.isNotEmpty) ...[
-                                        const SizedBox(height: 12),
-                                        Container(
-                                          padding: const EdgeInsets.all(8),
-                                          decoration: BoxDecoration(
-                                            color: Colors.white.withOpacity(
-                                              0.4,
-                                            ),
-                                            borderRadius: BorderRadius.circular(
-                                              16,
-                                            ),
-                                          ),
-                                          child: ListView.builder(
-                                            shrinkWrap: true,
-                                            physics:
-                                                const NeverScrollableScrollPhysics(),
-                                            itemCount:
-                                                _localTodoSubtasks.length,
-                                            itemBuilder: (context, index) {
-                                              return Padding(
-                                                padding:
-                                                    const EdgeInsets.symmetric(
-                                                      horizontal: 12.0,
-                                                      vertical: 6.0,
-                                                    ),
-                                                child: Row(
-                                                  children: [
-                                                    const Icon(
-                                                      Icons
-                                                          .radio_button_off_rounded,
-                                                      size: 16,
-                                                      color:
-                                                          ForgeTheme.brandBlue,
-                                                    ),
-                                                    const SizedBox(width: 10),
-                                                    Expanded(
-                                                      child: Text(
-                                                        _localTodoSubtasks[index],
-                                                        style: const TextStyle(
-                                                          fontWeight:
-                                                              FontWeight.w700,
-                                                          fontSize: 13,
-                                                          color: ForgeTheme
-                                                              .textDark,
-                                                        ),
-                                                      ),
-                                                    ),
-                                                    GestureDetector(
-                                                      onTap: () => setState(
-                                                        () => _localTodoSubtasks
-                                                            .removeAt(index),
-                                                      ),
-                                                      child: Icon(
-                                                        Icons.close_rounded,
-                                                        size: 16,
-                                                        color: Colors.redAccent
-                                                            .withOpacity(0.6),
-                                                      ),
-                                                    ),
-                                                  ],
-                                                ),
-                                              );
-                                            },
+                                        GestureDetector(
+                                          onTap: () => setState(() => _localTodoSubtasks.removeAt(index)),
+                                          child: Transform.scale(
+                                            scale: 0.8,
+                                            child: Image.asset("assets/icons/close.png", color: Colors.redAccent.withOpacity(0.6)),
                                           ),
                                         ),
                                       ],
-                                    ],
-                                  ),
-                          ),
+                                    ),
+                                  );
+                                },
+                              ),
+                            ),
+                          ],
+
                           const SizedBox(height: 28),
                           Row(
                             children: [
@@ -801,18 +600,11 @@ class _AddEventScreenState extends State<AddEventScreen> {
                                   onTap: _clearWholeFormFields,
                                   child: Container(
                                     height: 54,
-                                    decoration: BoxDecoration(
-                                      color: Colors.white,
-                                      borderRadius: BorderRadius.circular(24),
-                                    ),
+                                    decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(24)),
                                     child: const Center(
                                       child: Text(
                                         "Cancel",
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.w800,
-                                          color: Color(0xFF64748B),
-                                          fontSize: 15,
-                                        ),
+                                        style: TextStyle(fontWeight: FontWeight.w800, color: Color(0xFF64748B), fontSize: 15),
                                       ),
                                     ),
                                   ),
@@ -827,25 +619,12 @@ class _AddEventScreenState extends State<AddEventScreen> {
                                     decoration: BoxDecoration(
                                       color: ForgeTheme.brandBlue,
                                       borderRadius: BorderRadius.circular(24),
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: ForgeTheme.brandBlue
-                                              .withOpacity(0.3),
-                                          blurRadius: 12,
-                                          offset: const Offset(0, 4),
-                                        ),
-                                      ],
+                                      boxShadow: [BoxShadow(color: ForgeTheme.brandBlue.withOpacity(0.3), blurRadius: 12, offset: const Offset(0, 4))],
                                     ),
                                     child: Center(
                                       child: Text(
-                                        _isGroupEventMode
-                                            ? "Deploy Card"
-                                            : "Save Item",
-                                        style: const TextStyle(
-                                          fontWeight: FontWeight.w800,
-                                          color: Colors.white,
-                                          fontSize: 15,
-                                        ),
+                                        _isGroupEventMode ? "Deploy Card" : "Save Item",
+                                        style: const TextStyle(fontWeight: FontWeight.w800, color: Colors.white, fontSize: 15),
                                       ),
                                     ),
                                   ),
@@ -869,40 +648,29 @@ class _AddEventScreenState extends State<AddEventScreen> {
       padding: const EdgeInsets.only(left: 12.0, bottom: 6),
       child: Text(
         text,
-        style: const TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.w800,
-          color: Color(0xFF1E293B),
-          letterSpacing: 0.2,
-        ),
+        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: Color(0xFF1E293B), letterSpacing: 0.2),
       ),
     );
   }
 
-  Widget _buildStyledTextField(
-    TextEditingController controller,
-    String hint,
-    IconData leadingIcon, {
-    required bool isMultiLine,
-  }) {
+  // Refactored helper to support Image Asset strings cleanly
+  Widget _buildStyledTextField(TextEditingController controller, String hint, String assetPath, {required bool isMultiLine}) {
     return Container(
       constraints: const BoxConstraints(minHeight: 52),
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(26),
-      ),
+      decoration: BoxDecoration(color: ForgeTheme.background, borderRadius: BorderRadius.circular(26)),
       child: Row(
-        crossAxisAlignment: isMultiLine
-            ? CrossAxisAlignment.start
-            : CrossAxisAlignment.center,
+        crossAxisAlignment: isMultiLine ? CrossAxisAlignment.start : CrossAxisAlignment.center,
         children: [
           Padding(
             padding: EdgeInsets.only(top: isMultiLine ? 4.0 : 0.0),
             child: CircleAvatar(
               radius: 20,
               backgroundColor: ForgeTheme.brandBlue,
-              child: Icon(leadingIcon, color: Colors.white, size: 16),
+              child: Transform.scale(
+                scale: 0.5,
+                child: Image.asset(assetPath, color: Colors.white),
+              ),
             ),
           ),
           const SizedBox(width: 12),
@@ -910,24 +678,12 @@ class _AddEventScreenState extends State<AddEventScreen> {
             child: TextField(
               controller: controller,
               maxLines: isMultiLine ? null : 1,
-              keyboardType: isMultiLine
-                  ? TextInputType.multiline
-                  : TextInputType.text,
-              textInputAction: isMultiLine
-                  ? TextInputAction.newline
-                  : TextInputAction.done,
-              style: const TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w700,
-                color: ForgeTheme.textDark,
-              ),
+              keyboardType: isMultiLine ? TextInputType.multiline : TextInputType.text,
+              textInputAction: isMultiLine ? TextInputAction.newline : TextInputAction.done,
+              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: ForgeTheme.textDark),
               decoration: InputDecoration(
                 hintText: hint,
-                hintStyle: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: const Color(0xFF0F172A).withOpacity(0.3),
-                ),
+                hintStyle: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: const Color(0xFF0F172A).withOpacity(0.3)),
                 border: InputBorder.none,
                 contentPadding: const EdgeInsets.symmetric(vertical: 10),
               ),
@@ -938,32 +694,29 @@ class _AddEventScreenState extends State<AddEventScreen> {
     );
   }
 
-  Widget _buildPickerTile(IconData icon, String valueText, VoidCallback onTap) {
+  // Refactored helper to support Image Asset strings cleanly
+  Widget _buildPickerTile(String assetPath, String valueText, VoidCallback onTap) {
     return GestureDetector(
       onTap: onTap,
       child: Container(
         height: 52,
         padding: const EdgeInsets.symmetric(horizontal: 6),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(26),
-        ),
+        decoration: BoxDecoration(color: ForgeTheme.background, borderRadius: BorderRadius.circular(26)),
         child: Row(
           children: [
             CircleAvatar(
               radius: 20,
               backgroundColor: ForgeTheme.brandBlue,
-              child: Icon(icon, color: Colors.white, size: 16),
+              child: Transform.scale(
+                scale: 0.5,
+                child: Image.asset(assetPath, color: Colors.white),
+              ),
             ),
             const SizedBox(width: 10),
             Expanded(
               child: Text(
                 valueText,
-                style: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                  color: Color(0xFF0F172A),
-                ),
+                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Color(0xFF0F172A)),
               ),
             ),
           ],
@@ -980,7 +733,7 @@ class _AddEventScreenState extends State<AddEventScreen> {
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         margin: const EdgeInsets.only(right: 8),
         decoration: BoxDecoration(
-          color: isSelected ? ForgeTheme.brandBlue : Colors.white,
+          color: isSelected ? ForgeTheme.brandBlue : ForgeTheme.background,
           borderRadius: BorderRadius.circular(20),
         ),
         child: Text(
@@ -1000,31 +753,23 @@ class _AddEventScreenState extends State<AddEventScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         GestureDetector(
-          onTap: () => setState(
-            () => _isParticipantDropdownOpen = !_isParticipantDropdownOpen,
-          ),
+          onTap: () => setState(() => _isParticipantDropdownOpen = !_isParticipantDropdownOpen),
           child: Container(
             height: 52,
             padding: const EdgeInsets.symmetric(horizontal: 6),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: ForgeTheme.background,
               borderRadius: BorderRadius.circular(26),
-              border: Border.all(
-                color: _isParticipantDropdownOpen
-                    ? ForgeTheme.brandBlue
-                    : Colors.transparent,
-                width: 1.5,
-              ),
+              border: Border.all(color: _isParticipantDropdownOpen ? ForgeTheme.brandBlue : Colors.transparent, width: 1.5),
             ),
             child: Row(
               children: [
-                const CircleAvatar(
+                CircleAvatar(
                   radius: 20,
                   backgroundColor: ForgeTheme.brandBlue,
-                  child: Icon(
-                    Icons.people_alt_rounded,
-                    color: Colors.white,
-                    size: 16,
+                  child: Transform.scale(
+                    scale: 0.5,
+                    child: Image.asset("assets/icons/person.png", color: Colors.white),
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -1036,16 +781,12 @@ class _AddEventScreenState extends State<AddEventScreen> {
                     style: TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
-                      color: const Color(
-                        0xFF0F172A,
-                      ).withOpacity(_selectedAssigneeIds.isEmpty ? 0.3 : 0.8),
+                      color: const Color(0xFF0F172A).withOpacity(_selectedAssigneeIds.isEmpty ? 0.3 : 0.8),
                     ),
                   ),
                 ),
                 Icon(
-                  _isParticipantDropdownOpen
-                      ? Icons.keyboard_arrow_up_rounded
-                      : Icons.keyboard_arrow_down_rounded,
+                  _isParticipantDropdownOpen ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded,
                   color: const Color(0xFF0F172A).withOpacity(0.4),
                 ),
                 const SizedBox(width: 12),
@@ -1059,31 +800,16 @@ class _AddEventScreenState extends State<AddEventScreen> {
           child: _isParticipantDropdownOpen
               ? Container(
                   margin: const EdgeInsets.only(top: 8),
-                  padding: const EdgeInsets.symmetric(
-                    vertical: 8,
-                    horizontal: 12,
-                  ),
+                  padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: ForgeTheme.background,
                     borderRadius: BorderRadius.circular(24),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.04),
-                        blurRadius: 16,
-                        offset: const Offset(0, 6),
-                      ),
-                    ],
+                    boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 16, offset: const Offset(0, 6))],
                   ),
                   child: _coworkersList.isEmpty
                       ? const Padding(
                           padding: EdgeInsets.all(16.0),
-                          child: Text(
-                            "No colleagues found in this company.",
-                            style: TextStyle(
-                              color: ForgeTheme.textMuted,
-                              fontSize: 13,
-                            ),
-                          ),
+                          child: Text("No colleagues found in this company.", style: TextStyle(color: ForgeTheme.textMuted, fontSize: 13)),
                         )
                       : ListView.builder(
                           shrinkWrap: true,
@@ -1091,54 +817,30 @@ class _AddEventScreenState extends State<AddEventScreen> {
                           itemCount: _coworkersList.length,
                           itemBuilder: (context, index) {
                             final employee = _coworkersList[index];
-                            final bool isChecked = _selectedAssigneeIds
-                                .contains(employee['uid']);
+                            final bool isChecked = _selectedAssigneeIds.contains(employee['uid']);
                             return Theme(
-                              data: Theme.of(context).copyWith(
-                                splashColor: Colors.transparent,
-                                highlightColor: Colors.transparent,
-                              ),
+                              data: Theme.of(context).copyWith(splashColor: Colors.transparent, highlightColor: Colors.transparent),
                               child: CheckboxListTile(
-                                controlAffinity:
-                                    ListTileControlAffinity.leading,
+                                controlAffinity: ListTileControlAffinity.leading,
                                 activeColor: ForgeTheme.brandBlue,
-                                contentPadding: const EdgeInsets.symmetric(
-                                  horizontal: 4,
-                                  vertical: 2,
-                                ),
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
                                 value: isChecked,
                                 title: Text(
                                   employee['username'] ?? 'Unknown Roster Name',
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 14,
-                                    color: ForgeTheme.textDark,
-                                  ),
+                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: ForgeTheme.textDark),
                                 ),
                                 subtitle: Text(
-                                  (employee['role'] ?? 'Team Member')
-                                      .toString()
-                                      .toUpperCase(),
-                                  style: const TextStyle(
-                                    fontSize: 11,
-                                    color: ForgeTheme.brandBlue,
-                                    fontWeight: FontWeight.w700,
-                                    letterSpacing: 0.5,
-                                  ),
+                                  (employee['role'] ?? 'Team Member').toString().toUpperCase(),
+                                  style: const TextStyle(fontSize: 11, color: ForgeTheme.brandBlue, fontWeight: FontWeight.w700, letterSpacing: 0.5),
                                 ),
                                 onChanged: (bool? value) {
                                   setState(() {
                                     if (value == true) {
-                                      if (!_selectedAssigneeIds.contains(
-                                        employee['uid'],
-                                      ))
-                                        _selectedAssigneeIds.add(
-                                          employee['uid'],
-                                        );
+                                      if (!_selectedAssigneeIds.contains(employee['uid'])) {
+                                        _selectedAssigneeIds.add(employee['uid']);
+                                      }
                                     } else {
-                                      _selectedAssigneeIds.remove(
-                                        employee['uid'],
-                                      );
+                                      _selectedAssigneeIds.remove(employee['uid']);
                                     }
                                   });
                                 },
@@ -1161,50 +863,26 @@ class _AddEventScreenState extends State<AddEventScreen> {
         color: ForgeTheme.surfaceWhite.withOpacity(0.5),
         shape: BoxShape.circle,
         border: Border.all(color: ForgeTheme.surfaceWhite, width: 2),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.04),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 8, offset: const Offset(0, 2))],
       ),
       child: Transform.scale(
         scale: 0.45,
         child: Image.asset(
           assetPath,
           fit: BoxFit.contain,
-          errorBuilder: (context, error, stackTrace) =>
-              Icon(fallbackIcon, color: const Color(0xFF0F172A), size: 20),
+          errorBuilder: (context, error, stackTrace) => Icon(fallbackIcon, color: const Color(0xFF0F172A), size: 20),
         ),
       ),
     );
   }
 
   String _getMonthNameShort(int month) {
-    const months = [
-      "Jan",
-      "Feb",
-      "Mar",
-      "Apr",
-      "May",
-      "Jun",
-      "Jul",
-      "Aug",
-      "Sep",
-      "Oct",
-      "Nov",
-      "Dec",
-    ];
+    const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
     return months[month - 1];
   }
 }
 
-Widget _buildPriorityChip(
-  String label,
-  String selectedPriority,
-  VoidCallback onTap,
-) {
+Widget _buildPriorityChip(String label, String selectedPriority, VoidCallback onTap) {
   final bool isSelected = selectedPriority == label;
 
   return GestureDetector(
@@ -1213,7 +891,7 @@ Widget _buildPriorityChip(
       margin: const EdgeInsets.only(right: 8),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       decoration: BoxDecoration(
-        color: isSelected ? ForgeTheme.brandBlue : Colors.white,
+        color: isSelected ? ForgeTheme.brandBlue : ForgeTheme.background,
         borderRadius: BorderRadius.circular(20),
       ),
       child: Text(

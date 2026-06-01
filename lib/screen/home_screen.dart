@@ -51,7 +51,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
   }
 
-  // Starts the controller at page index 0 to eliminate infinite loop offset math gaps
   void _initPageController() {
     _pageController = PageController(
       viewportFraction: 0.86,
@@ -93,7 +92,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     super.dispose();
   }
 
-  // Dynamically filters consolidated structures matching string date keys
   List<Map<String, dynamic>> _getFilteredTasks(List<Map<String, dynamic>> tasks) {
     if (_selectedFilter == "All") {
       return tasks;
@@ -113,7 +111,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       final weekEnd = _currentTrackingDay.add(const Duration(days: 7));
 
       return tasks.where((task) {
-        // Handles timestamp string format checks for target weekly boundaries safely
         final itemDateStr = task['dueDate'] ?? task['date'];
         if (itemDateStr != null) {
           try {
@@ -239,9 +236,19 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                           ],
                         ),
                       ),
-                      _buildHeaderIconButton("assets/icons/chat.png", Icons.chat_bubble_outline_rounded),
+                      _buildHeaderIconButton(
+                        assetPath: "assets/icons/chat.png",
+                        fallbackIcon: Icons.chat_bubble_outline_rounded,
+                        onTap: () {
+                          Navigator.pushNamed(context, '/chat');
+                        },
+                      ),
                       const SizedBox(width: 12),
-                      _buildHeaderIconButton("assets/icons/notification.png", Icons.notifications_none_rounded),
+                      _buildHeaderIconButton(
+                        assetPath: "assets/icons/notification.png",
+                        fallbackIcon: Icons.notifications_none_rounded,
+                        onTap: () {},
+                      ),
                     ],
                   ),
 
@@ -299,6 +306,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                       stream: FirebaseFirestore.instance
                           .collection('tasks')
                           .where('companyId', isEqualTo: _myCompanyId)
+                          .where('isCompleted', isEqualTo: false)
                           .snapshots(),
                       builder: (context, taskSnapshot) {
                         if (taskSnapshot.hasError) {
@@ -324,6 +332,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                               .collection('users')
                               .doc(uid)
                               .collection('personal_todos')
+                              .where('isCompleted', isEqualTo: false)
                               .snapshots(),
                           builder: (context, todoSnapshot) {
                             if (!todoSnapshot.hasData) {
@@ -340,15 +349,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                               };
                             }).toList();
 
-                            // Merges the raw sets into a single local cache structure
                             List<Map<String, dynamic>> unifiedTasks = List.from(rawCompanyTasks)..addAll(personalTodos);
-                            
-                            // Passes unified elements through selection filters safely
                             final List<Map<String, dynamic>> combinedTasks = _getFilteredTasks(unifiedTasks);
-
-                            debugPrint("COMPANY COUNT: ${rawCompanyTasks.length}");
-                            debugPrint("TODOS COUNT: ${personalTodos.length}");
-                            debugPrint("FILTERED CARDS RENDERING: ${combinedTasks.length}");
 
                             if (combinedTasks.isEmpty) {
                               return _buildEmptyStateView();
@@ -362,7 +364,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                               itemBuilder: (context, index) {
                                 double indexPositionDelta = index - _scrollOffset;
 
-                                // --- MOCKUP ARRANGEMENT TRANSFORMATIONS MATRIX ---
                                 double rotationAngle = indexPositionDelta * -0.06;
                                 double horizontalShift = indexPositionDelta * 28.0;
                                 double verticalStackOffset = indexPositionDelta * 14.0;
@@ -436,6 +437,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   Widget _buildTaskCard(Map<String, dynamic> task) {
     final bool isPersonal = task['isPersonal'] == true;
+    final String originalTitle = (task['title'] ?? 'Untitled Task').toString();
+
+    // 28 character validation check loop
+    String truncatedTitle = originalTitle;
+    if (originalTitle.length > 28) {
+      truncatedTitle = "${originalTitle.substring(0, 28)}... ";
+    }
 
     return GestureDetector(
       onTap: () {
@@ -536,58 +544,28 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               ],
             ),
             const SizedBox(height: 18),
-            Text(
-              (task['title'] ?? 'Untitled Task').toString(),
-              style: const TextStyle(
-                fontSize: 30,
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
-                height: 1.15,
-                letterSpacing: -0.5,
+            
+            // --- FIXED: REDUCED FONT SIZE BY 2 (FROM 34 TO 32) ---
+            Expanded(
+              child: Text(
+                truncatedTitle,
+                maxLines: 3, 
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 30, 
+                  fontWeight: FontWeight.w700,
+                  color: Colors.white,
+                  height: 1.12, 
+                  letterSpacing: -0.6,
+                ),
               ),
             ),
-            const Spacer(),
+            
+            const SizedBox(height: 12),
             Row(
               children: [
                 Expanded(
-                  child: Container(
-                    height: 54,
-                    padding: const EdgeInsets.symmetric(horizontal: 6),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.22),
-                      borderRadius: BorderRadius.circular(30),
-                    ),
-                    child: Row(
-                      children: [
-                        const CircleAvatar(
-                          radius: 21,
-                          backgroundColor: Colors.white,
-                          child: Icon(
-                            Icons.check,
-                            color: ForgeTheme.brandBlue,
-                            size: 18,
-                          ),
-                        ),
-                        const SizedBox(width: 14),
-                        const Text(
-                          "To Complete",
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w600,
-                            fontSize: 13,
-                            letterSpacing: 0.2,
-                          ),
-                        ),
-                        const Spacer(),
-                        Icon(
-                          Icons.keyboard_double_arrow_right_rounded,
-                          color: Colors.white.withOpacity(0.7),
-                          size: 20,
-                        ),
-                        const SizedBox(width: 10),
-                      ],
-                    ),
-                  ),
+                  child: _SwipeToCompleteBar(task: task),
                 ),
                 const SizedBox(width: 16),
                 Container(
@@ -617,7 +595,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     );
   }
 
-  Widget _buildHeaderIconButton(String assetPath, IconData fallbackIcon) {
+  Widget _buildHeaderIconButton({
+    required String assetPath, 
+    required IconData fallbackIcon, 
+    required VoidCallback onTap, 
+  }) {
     return Container(
       width: 46,
       height: 46,
@@ -633,13 +615,18 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           ),
         ],
       ),
-      child: Transform.scale(
-        scale: 0.45,
-        child: Image.asset(
-          assetPath,
-          fit: BoxFit.contain,
-          errorBuilder: (context, error, stackTrace) =>
-              Icon(fallbackIcon, color: const Color(0xFF0F172A), size: 20),
+      child: InkWell(
+        onTap: onTap, 
+        customBorder: const CircleBorder(), 
+        splashColor: ForgeTheme.brandBlue.withOpacity(0.1), 
+        child: Transform.scale(
+          scale: 0.45,
+          child: Image.asset(
+            assetPath,
+            fit: BoxFit.contain,
+            errorBuilder: (context, error, stackTrace) =>
+                Icon(fallbackIcon, color: const Color(0xFF0F172A), size: 20),
+          ),
         ),
       ),
     );
@@ -721,6 +708,157 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _SwipeToCompleteBar extends StatefulWidget {
+  final Map<String, dynamic> task;
+
+  const _SwipeToCompleteBar({required this.task});
+
+  @override
+  State<_SwipeToCompleteBar> createState() => _SwipeToCompleteBarState();
+}
+
+class _SwipeToCompleteBarState extends State<_SwipeToCompleteBar> {
+  double _dragOffset = 0.0;
+  bool _isCompletedActionTriggered = false;
+
+  void _executeCompletion() async {
+    setState(() {
+      _isCompletedActionTriggered = true;
+    });
+
+    final bool isPersonal = widget.task['isPersonal'] == true;
+    final String docId = widget.task['docId'] ?? '';
+    final uid = FirebaseAuth.instance.currentUser?.uid ?? '';
+
+    try {
+      if (isPersonal) {
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(uid)
+            .collection('personal_todos')
+            .doc(docId)
+            .update({'isCompleted': true});
+      } else {
+        await FirebaseFirestore.instance
+            .collection('tasks')
+            .doc(docId)
+            .update({'isCompleted': true});
+      }
+    } catch (e) {
+      debugPrint("Error writing completion milestone: $e");
+      if (mounted) {
+        setState(() {
+          _dragOffset = 0.0;
+          _isCompletedActionTriggered = false;
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 54, 
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.22),
+        borderRadius: BorderRadius.circular(30),
+      ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final double maxSliderWidth = constraints.maxWidth;
+          const double handleButtonRadius = 42.0; 
+          final double maxDragDistance = maxSliderWidth - handleButtonRadius - 12.0;
+
+          return Stack(
+            alignment: Alignment.centerLeft,
+            children: [
+              Positioned.fill(
+                child: Align(
+                  child: Opacity(
+                    opacity: math.max(0.0, 1.0 - (_dragOffset / (maxDragDistance / 1.4))),
+                    
+                    child: const Text(
+                      "  To Complete",
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13,
+                        letterSpacing: 0.2,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+
+              Positioned(
+                right: 14,
+                child: Opacity(
+                  opacity: math.max(0.0, 1.0 - (_dragOffset / maxDragDistance)),
+                  child: Icon(
+                    Icons.keyboard_double_arrow_right_rounded,
+                    color: Colors.white.withOpacity(0.8),
+                    size: 20,
+                  ),
+                ),
+              ),
+
+              AnimatedPositioned(
+                duration: _isCompletedActionTriggered ? const Duration(milliseconds: 150) : Duration.zero,
+                curve: Curves.easeOut,
+                left: _dragOffset + 6, 
+                child: GestureDetector(
+                  onHorizontalDragUpdate: (details) {
+                    if (_isCompletedActionTriggered) return;
+                    setState(() {
+                      _dragOffset += details.primaryDelta!;
+                      if (_dragOffset < 0.0) _dragOffset = 0.0;
+                      if (_dragOffset > maxDragDistance) _dragOffset = maxDragDistance;
+                    });
+                  },
+                  onHorizontalDragEnd: (details) {
+                    if (_isCompletedActionTriggered) return;
+                    
+                    if (_dragOffset >= maxDragDistance * 0.85) {
+                      setState(() => _dragOffset = maxDragDistance);
+                      _executeCompletion();
+                    } else {
+                      setState(() => _dragOffset = 0.0);
+                    }
+                  },
+                  child: Container(
+                    width: handleButtonRadius,
+                    height: handleButtonRadius,
+                    decoration: const BoxDecoration(
+                      color: Colors.white,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Center(
+                      child: _isCompletedActionTriggered
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2.5,
+                                color: ForgeTheme.brandBlue,
+                              ),
+                            )
+                          : const Icon(
+                              Icons.check,
+                              color: ForgeTheme.brandBlue, 
+                              size: 18,
+                            ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
