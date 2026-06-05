@@ -217,11 +217,11 @@ Add screenshots here.
 
 ### Analytics Dashboard
 
-[![Analytics](screenshots/analytics.png)](https://github.com/Arjav-07/neuroforge_workflow/blob/branch-9/assets/5.png)
+![Analytics](https://github.com/Arjav-07/neuroforge_workflow/blob/branch-9/assets/5.png)
 
 ### AI Assistant & Settings
 
-[![AI Assistant](screenshots/ai_assistant.png)](https://github.com/Arjav-07/neuroforge_workflow/blob/branch-9/assets/4.png)
+![AI Assistant](https://github.com/Arjav-07/neuroforge_workflow/blob/branch-9/assets/4.png)
 
 ---
 
