@@ -207,29 +207,21 @@ Analytics Engine:
 
 Add screenshots here.
 
-### Home Dashboard
+### Home Dashboard & Task Details
 
-![Home](screenshots/home.png)
+[![Home](screenshots/home.png)](https://github.com/Arjav-07/neuroforge_workflow/blob/branch-9/assets/2.png)
 
-### Task Details
+### Calendar & Create Task
 
-![Task Details](screenshots/task_details.png)
-
-### Calendar
-
-![Calendar](screenshots/calendar.png)
-
-### Create Task
-
-![Create Task](screenshots/create_task.png)
+[![Calendar](screenshots/calendar.png)](https://github.com/Arjav-07/neuroforge_workflow/blob/branch-9/assets/3.png)
 
 ### Analytics Dashboard
 
-![Analytics](screenshots/analytics.png)
+[![Analytics](screenshots/analytics.png)](https://github.com/Arjav-07/neuroforge_workflow/blob/branch-9/assets/5.png)
 
-### AI Assistant
+### AI Assistant & Settings
 
-![AI Assistant](screenshots/ai_assistant.png)
+[![AI Assistant](screenshots/ai_assistant.png)](https://github.com/Arjav-07/neuroforge_workflow/blob/branch-9/assets/4.png)
 
 ---
 
