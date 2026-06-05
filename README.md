@@ -209,11 +209,11 @@ Add screenshots here.
 
 ### Home Dashboard & Task Details
 
-[![Home](https://raw.githubusercontent.com/Arjav-07/neuroforge_workflow/refs/heads/branch-9/assets/2.png)
+![Home](https://raw.githubusercontent.com/Arjav-07/neuroforge_workflow/refs/heads/branch-9/assets/2.png)
 
 ### Calendar & Create Task
 
-[![Calendar](screenshots/calendar.png)](https://github.com/Arjav-07/neuroforge_workflow/blob/branch-9/assets/3.png)
+![Calendar](https://github.com/Arjav-07/neuroforge_workflow/blob/branch-9/assets/3.png)
 
 ### Analytics Dashboard
 
